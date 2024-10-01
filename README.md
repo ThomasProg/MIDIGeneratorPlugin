@@ -1,2 +1,1 @@
-# MIDIGeneratorPlugin
-A plugin for Unreal Engine 5 that wraps MidiTokCpp to generate MIDI at runtime
+To make the plugin work, make sure to add Fluidsynth's dll files in the Binaries/Win64 folder.
