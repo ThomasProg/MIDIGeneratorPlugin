@@ -3,33 +3,78 @@
 
 #include "MIDIGenerator.h"
 
-#include "gen.h"
-
-void OnPitch(void* data, unsigned char pitch)
+void _OnPitch(void* data, unsigned char pitch)
 {
-	int pitchInt = int(pitch);
+	int32 pitchInt = int32(pitch);
 
 	//if (GEngine)
 	//{
 	//	GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Green, FString::Printf(TEXT("%d"), pitchInt));
 	//}
 
+	((UMIDIGenerator*) data)->OnPitch(pitchInt);
 }
 
-void UMIDIGenerator::Generate()
+void UMIDIGenerator::Generate(int32 nbIterations, TArray<int32>& tokens)
 {
-	EnvHandle env = createEnv(false);
-	MidiTokenizerHandle tok = createMidiTokenizer("C:/Users/thoma/Documents/Unreal Projects/MIDITokCpp/tokenizer.json");
-	MusicGeneratorHandle generator = createMusicGenerator();
-	RedirectorHandle redirector = createRedirector();
+	for (int i = 0; i < nbIterations; i++)
+	{
+		generator_generateNextToken(generator, input);
+	}
 
-	redirector_bindPitch(redirector, tok, "Pitch_", this, OnPitch);
+	int32_t* outTokens = nullptr;
+	int32_t outTokensSize = 0;
 
+	input_decodeIDs(input, tok, &outTokens, &outTokensSize);
 
+	tokens.Empty(outTokensSize);
+	for (int32_t i = 0; i < outTokensSize; i++)
+	{
+		tokens.Push(outTokens[i]);
+	}
+
+	input_decodeIDs_free(outTokens);
+}
+
+bool UMIDIGenerator::RedirectorCall(int32 token)
+{
+	return redirector_call(redirector, token);
+}
+
+void UMIDIGenerator::Init(const FString& tokenizerPath, const FString& modelPath)
+{
+	env = createEnv(false);
+	tok = createMidiTokenizer(TCHAR_TO_UTF8(*tokenizerPath));
+	generator = createMusicGenerator();
+
+	generator_loadOnnxModel(generator, env, TCHAR_TO_UTF8(*modelPath));
+
+	int32 input_ids[] = {
+	942,    65,  1579,  1842,   616,    46,  3032,  1507,   319,  1447,
+	12384,  1016,  1877,   319, 15263,  3396,   302,  2667,  1807,  3388,
+	2649,  1173,    50,   967,  1621,   256,  1564,   653,  1701,   377
+	};
+
+	int32 size = sizeof(input_ids) / sizeof(*input_ids);
+	input = generator_generateInput(generator, input_ids, size);
+
+	redirector = createRedirector();
+
+	redirector_bindPitch(redirector, tok, "Pitch_", this, _OnPitch);
+}
+
+void UMIDIGenerator::Deinit()
+{
 	destroyRedirector(redirector);
+	generator_generateInput_free(input);
 	destroyMusicGenerator(generator);
 	destroyMidiTokenizer(tok);
 	destroyEnv(env);
+}
+
+void UMIDIGenerator::OnPitch_Implementation(int32 pitch)
+{
+
 }
 
 //void UFluidsynthAudioPlayer::PostInitProperties()

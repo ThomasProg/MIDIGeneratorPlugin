@@ -16,11 +16,24 @@
 	"Installed": false,
 	"Modules": [
 		{
+			"Name": "MetasoundMIDIGeneratorWrapper",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		},
+		{
 			"Name": "MIDIGeneratorWrapper",
 			"Type": "Runtime",
 			"LoadingPhase": "Default"
 		}
 	],
 	"Plugins": [
+		{
+			"Name": "Metasound",
+			"Enabled": true
+		},
+		{
+			"Name": "Harmonix",
+			"Enabled": true
+		}
 	]
 }

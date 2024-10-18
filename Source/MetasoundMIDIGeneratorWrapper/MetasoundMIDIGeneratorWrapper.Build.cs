@@ -2,9 +2,9 @@
 
 using UnrealBuildTool;
 
-public class MIDIGeneratorWrapper : ModuleRules
+public class MetasoundMIDIGeneratorWrapper : ModuleRules
 {
-	public MIDIGeneratorWrapper(ReadOnlyTargetRules Target) : base(Target)
+	public MetasoundMIDIGeneratorWrapper(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
 		OptimizeCode = CodeOptimization.Never;
@@ -31,7 +31,14 @@ public class MIDIGeneratorWrapper : ModuleRules
 				"Engine",
 				"MIDIGeneratorLibrary",
 				"Projects",
-				"Serialization",
+                "MetasoundEngine",
+                "MetasoundFrontend",
+                "MetasoundStandardNodes",
+                "HarmonixMetasound",
+                "HarmonixDsp",
+                "HarmonixMidi",
+                "Serialization",
+				"MIDIGeneratorWrapper",
 				// ... add other public dependencies that you statically link with here ...
 			}
 			);
@@ -43,8 +50,10 @@ public class MIDIGeneratorWrapper : ModuleRules
 				// ... add private dependencies that you statically link with here ...	
 					"AudioExtensions",
 					"AudioMixer",
-					"SignalProcessing"
-			}
+					"SignalProcessing",
+                    "MetasoundGraphCore",
+                    "MetasoundGenerator",
+            }
 			);
 		
 		
