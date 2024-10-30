@@ -32,6 +32,8 @@ public class MIDIGeneratorWrapper : ModuleRules
 				"MIDIGeneratorLibrary",
 				"Projects",
 				"Serialization",
+				"HarmonixMidi",
+				"Harmonix",
 				// ... add other public dependencies that you statically link with here ...
 			}
 			);

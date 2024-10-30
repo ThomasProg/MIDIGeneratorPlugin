@@ -15,7 +15,7 @@ class MIDIGENERATORWRAPPER_API UMIDIGenerator : public UObject
 {
 	GENERATED_BODY()
 
-
+public:
 	EnvHandle env;
 	MidiTokenizerHandle tok;
 	MusicGeneratorHandle generator;
