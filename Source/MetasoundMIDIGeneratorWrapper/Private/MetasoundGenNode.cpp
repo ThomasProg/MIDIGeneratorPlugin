@@ -118,7 +118,7 @@ namespace Metasound
 			Args args{ i, UnplayedTokenIndex, this};
 
 			MidiConverterHandle converter = createMidiConverter();
-			converterSetTokenizer(converter, Generator->tok);
+			converterSetTokenizer(converter, Generator->gen.tok);
 
 			//Outputs.MidiClock->LockForMidiDataChanges();
 

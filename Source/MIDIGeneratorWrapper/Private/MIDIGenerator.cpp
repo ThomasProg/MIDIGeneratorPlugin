@@ -3,6 +3,23 @@
 
 #include "MIDIGenerator.h"
 
+void FMIDIGenerator::Init(const FString& tokenizerPath, const FString& modelPath)
+{
+	env = createEnv(false);
+	tok = createMidiTokenizer(TCHAR_TO_UTF8(*tokenizerPath));
+	generator = createMusicGenerator();
+
+	generator_loadOnnxModel(generator, env, TCHAR_TO_UTF8(*modelPath));
+
+}
+
+void FMIDIGenerator::Deinit()
+{
+	destroyMusicGenerator(generator);
+	destroyMidiTokenizer(tok);
+	destroyEnv(env);
+}
+
 void _OnPitch(void* data, unsigned char pitch)
 {
 	int32 pitchInt = int32(pitch);
@@ -19,21 +36,25 @@ void UMIDIGenerator::Generate(int32 nbIterations, TArray<int32>& tokens)
 {
 	for (int i = 0; i < nbIterations; i++)
 	{
-		generator_generateNextToken(generator, input);
+		generator_generateNextToken(gen.generator, runInstance);
 	}
 
-	int32_t* outTokens = nullptr;
-	int32_t outTokensSize = 0;
 
-	input_decodeIDs(input, tok, &outTokens, &outTokensSize);
+	int32_t* encodedTokens = nullptr;
+	std::int32_t nbEncodedTokens;
+	batch_getEncodedTokens(batch, &encodedTokens, &nbEncodedTokens);
 
-	tokens.Empty(outTokensSize);
-	for (int32_t i = 0; i < outTokensSize; i++)
+	int32_t* decodedTokens = nullptr;
+	int32_t nbDecodedTokens = 0;
+	tokenizer_decodeIDs(gen.tok, encodedTokens, nbEncodedTokens, &decodedTokens, &nbDecodedTokens);
+
+	tokens.Empty(nbDecodedTokens);
+	for (int32_t i = 0; i < nbDecodedTokens; i++)
 	{
-		tokens.Push(outTokens[i]);
+		tokens.Push(decodedTokens[i]);
 	}
 
-	input_decodeIDs_free(outTokens);
+	tokenizer_decodeIDs_free(decodedTokens);
 }
 
 bool UMIDIGenerator::RedirectorCall(int32 token)
@@ -43,11 +64,7 @@ bool UMIDIGenerator::RedirectorCall(int32 token)
 
 void UMIDIGenerator::Init(const FString& tokenizerPath, const FString& modelPath)
 {
-	env = createEnv(false);
-	tok = createMidiTokenizer(TCHAR_TO_UTF8(*tokenizerPath));
-	generator = createMusicGenerator();
-
-	generator_loadOnnxModel(generator, env, TCHAR_TO_UTF8(*modelPath));
+	gen.Init(tokenizerPath, modelPath);
 
 	int32 input_ids[] = {
 	942,    65,  1579,  1842,   616,    46,  3032,  1507,   319,  1447,
@@ -56,20 +73,23 @@ void UMIDIGenerator::Init(const FString& tokenizerPath, const FString& modelPath
 	};
 
 	int32 size = sizeof(input_ids) / sizeof(*input_ids);
-	input = generator_generateInput(generator, input_ids, size);
+	runInstance = createRunInstance();
+	batch = createBatch();
+	runInstance_addBatch(runInstance, batch);
+	batch_set(batch, input_ids, size, 0);
 
 	redirector = createRedirector();
 
-	redirector_bindPitch(redirector, tok, "Pitch_", this, _OnPitch);
+	redirector_bindPitch(redirector, gen.tok, "Pitch_", this, _OnPitch);
 }
 
 void UMIDIGenerator::Deinit()
 {
 	destroyRedirector(redirector);
-	generator_generateInput_free(input);
-	destroyMusicGenerator(generator);
-	destroyMidiTokenizer(tok);
-	destroyEnv(env);
+	destroyBatch(batch);
+	destroyRunInstance(runInstance);
+
+	gen.Deinit();
 }
 
 void UMIDIGenerator::OnPitch_Implementation(int32 pitch)
