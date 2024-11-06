@@ -10,7 +10,7 @@ void FMIDIGenerator::Init(const FString& tokenizerPath, const FString& modelPath
 	generator = createMusicGenerator();
 
 	generator_loadOnnxModel(generator, env, TCHAR_TO_UTF8(*modelPath));
-
+	generator_setConfig(generator, 4, 256, 6);
 }
 
 void FMIDIGenerator::Deinit()
@@ -19,6 +19,26 @@ void FMIDIGenerator::Deinit()
 	destroyMidiTokenizer(tok);
 	destroyEnv(env);
 }
+
+void FMIDIGenerator::Encode(const TArray<int32>& DecodedTokens, TArray<int32>& OutEncodedTokens)
+{
+
+
+}
+void FMIDIGenerator::Decode(const TArray<int32>& EncodedTokens, TArray<int32>& OutDecodedTokens)
+{
+	int32_t* outTokens = nullptr;
+	int32_t outTokensSize = 0;
+	tokenizer_decodeIDs(tok, EncodedTokens.GetData(), EncodedTokens.Num(), &outTokens, &outTokensSize);
+
+	OutDecodedTokens.SetNumUninitialized(outTokensSize);
+	for (int32 i = 0; i < outTokensSize; i++)
+	{
+		OutDecodedTokens[i] = outTokens[i];
+	}
+}
+
+
 
 void _OnPitch(void* data, unsigned char pitch)
 {

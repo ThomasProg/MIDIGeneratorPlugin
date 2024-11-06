@@ -17,6 +17,9 @@ struct MIDIGENERATORWRAPPER_API FMIDIGenerator
 	void Init(const FString& tokenizerPath = "C:/Users/thoma/Documents/Unreal Projects/MIDITokCpp/tokenizer.json", const FString& modelPath = "C:/Users/thoma/Documents/Unreal Projects/MIDITokCpp/onnx_model_path/gpt2-midi-model3_past.onnx");
 
 	void Deinit();
+
+	void Encode(const TArray<int32>& DecodedTokens, TArray<int32>& OutEncodedTokens);
+	void Decode(const TArray<int32>& EncodedTokens, TArray<int32>& OutDecodedTokens);
 };
 
 

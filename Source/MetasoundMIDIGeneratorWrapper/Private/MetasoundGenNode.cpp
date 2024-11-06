@@ -27,6 +27,7 @@
 #include "HarmonixMetasound/DataTypes/MidiClock.h"
 #include "HarmonixMetasound/DataTypes/MusicTimeInterval.h"
 #include "MIDIGenerator.h"
+#include "GenThread.h"
 
 // Required for ensuring the node is supported by all languages in engine. Must be unique per MetaSound.
 #define LOCTEXT_NAMESPACE "MetasoundStandardNodes_MetaSoundAIGenNode"
@@ -85,15 +86,50 @@ namespace Metasound
 			//Outputs.MidiStream->SetTicksPerQuarterNote(1);
 			
 
-			if (Generator == nullptr)
+			if ((!bIsThreaded) && Generator == nullptr)
 			{
 				Generator = NewObject<UMIDIGenerator>();
 			}
 
-			Generator->Init();
-			Generator->Generate(120, Tokens);
+			if (bIsThreaded)
+			{
+				GenThread.OnGenerated.BindLambda([this]()
+					{
+						TokenModifSection.Lock();
+						bShouldUpdateTokens = true;
+						Tokens = GenThread.EncodedLine;
+						TokenModifSection.Unlock();
+					});
+			}
 
+			FString TokPath = "C:/Users/thoma/Documents/Unreal Projects/MIDITokCpp/tokenizer.json";
+			FString ModelPath = "C:/Users/thoma/Documents/Unreal Projects/MIDITokCpp/onnx_model_path/gpt2-midi-model_past.onnx";
+			int32 input_ids[] = {
+			942,    65,  1579,  1842,   616,    46,  3032,  1507,   319,  1447,
+			12384,  1016,  1877,   319, 15263,  3396,   302,  2667,  1807,  3388,
+			2649,  1173,    50,   967,  1621,   256,  1564,   653,  1701,   377
+			};
+			int32 size = sizeof(input_ids) / sizeof(*input_ids);
+
+			TArray<int32> EncodedTokens;
+			EncodedTokens.SetNum(size);
+			for (int i = 0; i < size; i++)
+			{
+				EncodedTokens[i] = input_ids[i];
+			}
+
+			GenThread.Start(TokPath, ModelPath, EncodedTokens);
+
+			if (!bIsThreaded)
+			{
+				Generator->Init();
+				Generator->Generate(120, Tokens);
+			}
+
+			TokenModifSection.Lock();
+			Tokens = GenThread.EncodedLine;
 			UpdateScheduledMidiEvents();
+			TokenModifSection.Unlock();
 
 			Reset(InParams);
 
@@ -102,9 +138,13 @@ namespace Metasound
 
 		TArray<HarmonixMetasound::FMidiStreamEvent> EventsToPlay;
 
+		//int32 LastTick = 0;
 		void UpdateScheduledMidiEvents()
 		{
-			std::int32_t i = UnplayedTokenIndex;
+			Outputs.MidiClock->GetDrivingMidiPlayCursorMgr()->LockForMidiDataChanges();
+
+			//std::int32_t i = UnplayedTokenIndex;
+			std::int32_t i = 0;
 
 			struct Args
 			{
@@ -115,14 +155,17 @@ namespace Metasound
 				int32 LastTick = 0;
 			};
 
-			Args args{ i, UnplayedTokenIndex, this};
+			Args args{ i, UnplayedTokenIndex, this/*, LastTick*/ };
 
 			MidiConverterHandle converter = createMidiConverter();
-			converterSetTokenizer(converter, Generator->gen.tok);
+			converterSetTokenizer(converter, GenThread.Generator.tok);
+			//converterSetTokenizer(converter, Generator->gen.tok);
 
 			//Outputs.MidiClock->LockForMidiDataChanges();
 
+			int32 currentTick = Outputs.MidiClock->GetCurrentHiResTick();
 			MidiFileData->Tracks[0].Empty();
+			//MidiFileData->Tracks[0].ClearEventsAfter(currentTick, false);
 			converterSetOnNote(converter, [](void* data, const Note& newNote)
 				{
 					Args& args = *(Args*)(data);
@@ -135,7 +178,8 @@ namespace Metasound
 					int32 Velocity = newNote.velocity;
 
 					int32 Track = 0;
-					int32 Tick = newNote.tick*100;
+					//int32 Tick = newNote.tick*180;
+					int32 Tick = newNote.tick * 100;
 
 					if (args.LastTick <= Tick)
 					{
@@ -155,29 +199,43 @@ namespace Metasound
 
 				});
 
-			while (i < Tokens.Num())
+			int32* outTokens = nullptr;
+			int32 outTokensSize = 0;
+			tokenizer_decodeIDs(GenThread.Generator.tok, Tokens.GetData(), Tokens.Num(), &outTokens, &outTokensSize);
+
+			while (i < outTokensSize)
 			{
-				converterProcessToken(converter, Tokens.GetData(), Tokens.Num(), i, &args);
+				converterProcessToken(converter, outTokens, outTokensSize, i, &args);
 				i++;
 			}
+
+			ensureMsgf(!MidiFileData->Tracks[0].GetEvents().IsEmpty(), TEXT("Should not be empty!"));
+			//checkf((Index >= 0)& (Index < ArrayNum), TEXT("Array index out of bounds: %lld into an array of size %lld"), (long long)Index, (long long)ArrayNum); // & for one branch
+
+			tokenizer_decodeIDs_free(outTokens);
 
 			//Outputs.MidiClock->MidiDataChangesComplete(FMidiPlayCursorMgr::EMidiChangePositionCorrectMode::MaintainTick);
 
 			destroyMidiConverter(converter);
+			MidiFileData->Tracks[0].Sort();
+			//MidiFileData->Sort
+
+
+			Outputs.MidiClock->GetDrivingMidiPlayCursorMgr()->MidiDataChangeComplete(FMidiPlayCursorMgr::EMidiChangePositionCorrectMode::MaintainTick);
 		}
 
 		void Reset(const FResetParams&)
 		{
 			//Cursor.SetClock(Inputs.Clock->AsShared());
-			ApplyParameters();
 		}
 
 		~FAIGenOperator()
 		{
-			if (Generator != nullptr)
-			{
-				Generator->Deinit();
-			}
+			GenThread.Stop();
+			//if (Generator != nullptr)
+			//{
+			//	Generator->Deinit();
+			//}
 		}
 
 		class FCursor final : public FMidiPlayCursor
@@ -282,7 +340,6 @@ namespace Metasound
 
 			//SetClock(Inputs.Clock->AsShared());
 			//Outputs.MidiClock->AttachToTimeAuthority(*Inputs.Clock);
-			ApplyParameters();
 
 			//Cursor.SetClock(Inputs.Clock->AsShared());
 		}
@@ -326,41 +383,19 @@ namespace Metasound
 			return MakeUnique<FAIGenOperator>(InParams, InMidiClock, InTransport);
 		}
 
-		void ApplyParameters()
-		{
-			//PulseGenerator.Track = *Inputs.Track;
-			//PulseGenerator.Channel = *Inputs.Channel;
-			//PulseGenerator.NoteNumber = *Inputs.NoteNumber;
-			//PulseGenerator.Velocity = *Inputs.Velocity;
-			//PulseGenerator.SetInterval(
-			//	{
-			//		*Inputs.Interval,
-			//		*Inputs.Offset,
-			//		static_cast<uint16>(*Inputs.IntervalMultiplier),
-			//		static_cast<uint16>(*Inputs.OffsetMultiplier)
-			//	});
-		}
-
 
 	public:
-		int32 t = 0;
-
 		// From PulseGenerator.cpp
 		FMidiVoiceGeneratorBase VoiceGenerator{};
 		void Execute()
 		{
-			ApplyParameters();
-
-			//Outputs.MidiStream->PrepareBlock();
-			//Outputs.MidiClock->PrepareBlock();
-
-			//int32 Channel = 1;
-			//int32 NoteNumber = 60;
-			//int32 Velocity = 120;
-
-			//int32 Track = 0;
-			//int32 Tick = t;
-
+			if (bShouldUpdateTokens)
+			{
+				TokenModifSection.Lock();
+				UpdateScheduledMidiEvents();
+				bShouldUpdateTokens = false;
+				TokenModifSection.Unlock();
+			}
 
 			Outputs.MidiStream->PrepareBlock();
 
@@ -404,97 +439,6 @@ namespace Metasound
 				return GetNextTransportState(CurrentState);
 			};
 			ExecuteTransportSpans(Inputs.Transport, BlockSize, TransportHandler, MidiClockTransportHandler);
-
-
-
-
-
-
-
-
-
-
-
-
-			////t += 5;
-			//if (t == 0)
-			//{
-			//	t = 1;
-
-			//	int32 NoteOnSample = 0;
-			//	FMidiMsg Msg{ FMidiMsg::CreateNoteOn(Channel - 1, NoteNumber, Velocity) };
-			//	HarmonixMetasound::FMidiStreamEvent Event{ &VoiceGenerator, Msg };
-			//	Event.BlockSampleFrameIndex = NoteOnSample;
-			//	Event.AuthoredMidiTick = Tick;
-			//	Event.CurrentMidiTick = Tick;
-			//	Event.TrackIndex = Track;
-			//	Outputs.MidiStream->InsertMidiEvent(Event);
-			//}
-
-
-
-
-
-			//// Keep draining the queue if disabled, so we get the next note off,
-			//// and so we stay in phase if we toggle off and back on
-			//FCursor::FPulseTime NextPulse;
-			//while (Cursor.Pop(NextPulse))
-			//{
-			//	int32 NoteOnSample = NextPulse.AudioBlockFrame;
-
-			//	// Note off if there was a previous note on
-			//	if (LastNoteOn.IsSet())
-			//	{
-			//		check(LastNoteOn->MidiMessage.IsNoteOn());
-
-			//		// Trigger the note off one sample before the note on
-			//		const int32 NoteOffSample = NextPulse.AudioBlockFrame > 0 ? NextPulse.AudioBlockFrame - 1 : NextPulse.AudioBlockFrame;
-			//		NoteOnSample = NoteOffSample + 1;
-
-			//		// Trigger the note off one tick before the note on
-			//		const int32 NoteOffTick = NextPulse.MidiTick - 1;
-
-			//		FMidiMsg Msg{ FMidiMsg::CreateNoteOff(LastNoteOn->MidiMessage.GetStdChannel(), LastNoteOn->MidiMessage.GetStdData1()) };
-			//		HarmonixMetasound::FMidiStreamEvent Event{ &VoiceGenerator, Msg };
-			//		Event.BlockSampleFrameIndex = NoteOffSample;
-			//		Event.AuthoredMidiTick = NoteOffTick;
-			//		Event.CurrentMidiTick = NoteOffTick;
-			//		Event.TrackIndex = LastNoteOn->TrackIndex;
-			//		Outputs.MidiStream->InsertMidiEvent(Event);
-
-			//		LastNoteOn.Reset();
-			//	}
-
-			//	// Note on
-			//	if (Enabled && !EventsToPlay.IsEmpty())
-			//	{
-			//		HarmonixMetasound::FMidiStreamEvent& FrontEvent = EventsToPlay[0];
-			//		if (FrontEvent.CurrentMidiTick < NextPulse.MidiTick)
-			//		{
-			//			HarmonixMetasound::FMidiStreamEvent Event = EventsToPlay[0];
-			//			EventsToPlay.RemoveAt(0);
-
-			//			// Note ons must pass note number and velocity check
-			//			if (Event.MidiMessage.IsNoteOn())
-			//				{
-			//				const uint8 NoteNumber2 = Event.MidiMessage.GetStdData1();
-			//				const uint8 Velocity2 = Event.MidiMessage.GetStdData2();
-			//				const uint8 br = 0;
-			//			}
-
-			//			//FMidiMsg Msg{ FMidiMsg::CreateNoteOn(Channel - 1, NoteNumber, Velocity) };
-			//			//HarmonixMetasound::FMidiStreamEvent Event{ &VoiceGenerator, Msg };
-			//			//Event.BlockSampleFrameIndex = NoteOnSample;
-			//			//Event.AuthoredMidiTick = NextPulse.MidiTick;
-			//			//Event.CurrentMidiTick = NextPulse.MidiTick;
-			//			//Event.TrackIndex = Track;
-			//			Event.BlockSampleFrameIndex = NoteOnSample;
-			//			Outputs.MidiStream->InsertMidiEvent(Event);
-
-			//			LastNoteOn.Emplace(MoveTemp(Event));
-			//		}
-			//	}
-			//}
 		}
 
 		
@@ -590,15 +534,21 @@ namespace Metasound
 
 		FMidiFileProxyPtr MidiDataProxy;
 		TSharedPtr<FMidiFileData> MidiFileData;
+
+		bool bIsThreaded = true;
 		TWeakObjectPtr<UMIDIGenerator> Generator = nullptr;
 		TArray<int32> Tokens;
 		FCursor Cursor;
 		FSampleCount BlockSize = 0;
 		int32 PrerollBars = 8;
 		int32 UnplayedTokenIndex = 0;
+		FGenThread GenThread;
 
 		TOptional<HarmonixMetasound::FMidiStreamEvent> LastNoteOn;
 		bool Enabled{ true };
+
+		bool bShouldUpdateTokens = false;
+		FCriticalSection TokenModifSection;
 	};
 
 

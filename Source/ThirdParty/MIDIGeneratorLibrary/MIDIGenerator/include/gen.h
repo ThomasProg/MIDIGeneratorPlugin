@@ -17,6 +17,9 @@ extern "C"
     API_EXPORT void destroyMusicGenerator(MusicGeneratorHandle musicGen);
 
     API_EXPORT void generator_loadOnnxModel(MusicGeneratorHandle generator, EnvHandle env, const char* path);
+    API_EXPORT void generator_generateNextToken(MusicGeneratorHandle generator, RunInstanceHandle runInstance);
+
+    API_EXPORT void generator_setConfig(MusicGeneratorHandle generator, int64_t num_attention_heads, int64_t hidden_size, int64_t num_layer);
 }
 
 // Redirector
@@ -34,9 +37,7 @@ extern "C"
     API_EXPORT void redirector_bindPitch(RedirectorHandle redirector, const MidiTokenizerHandle tokenizer, const char* prefix, void* data, void(*callback)(void*, std::uint8_t pitch));
     API_EXPORT bool redirector_call(RedirectorHandle redirector, std::int32_t token);
 
-    API_EXPORT void generator_generateNextToken(MusicGeneratorHandle generator, RunInstanceHandle runInstance);
-
-    API_EXPORT void tokenizer_decodeIDs(MidiTokenizerHandle tokenizer, std::int32_t* inputIDs, std::int32_t size, std::int32_t** outputIDs, std::int32_t* outSize);
+    API_EXPORT void tokenizer_decodeIDs(MidiTokenizerHandle tokenizer, const std::int32_t* inputIDs, std::int32_t size, std::int32_t** outputIDs, std::int32_t* outSize);
     API_EXPORT void tokenizer_decodeIDs_free(std::int32_t* outputIDs);
 }
 
