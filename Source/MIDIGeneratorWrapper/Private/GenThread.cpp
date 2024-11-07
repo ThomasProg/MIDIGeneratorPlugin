@@ -66,6 +66,7 @@ uint32 FGenThread::Run()
 	{
 		/* Work on a dedicated thread */
 		//Generator->Generate(10, Tokens);
+
 		TArray<int32> Context;
 		int32 start = FMath::Max(0, EncodedLine.Num() - LineNbMaxToken);
 		for (int32 i = start; i < EncodedLine.Num(); i++)
@@ -82,8 +83,8 @@ uint32 FGenThread::Run()
 		batch_getEncodedTokens(batch, &tokens, &tokensSize);
 
 		//int32 newToken = generateNextToken(Context);
-
-		EncodedLine.Add(tokens[tokensSize-1]);
+		int32 newToken = tokens[tokensSize - 1];
+		EncodedLine.Add(newToken);
 
 
 		TryInsertTokenGroup();
@@ -107,7 +108,7 @@ uint32 FGenThread::Run()
 		//}
 
 		if (!bShutdown)
-			OnGenerated.ExecuteIfBound();
+			OnGenerated.ExecuteIfBound(newToken);
 	}
 
 	return 0;

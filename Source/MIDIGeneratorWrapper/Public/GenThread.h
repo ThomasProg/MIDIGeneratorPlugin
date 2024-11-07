@@ -5,7 +5,7 @@
 #include "CoreMinimal.h"
 #include "MIDIGenerator.h"
 
-DECLARE_DELEGATE(FOnGenerated);
+DECLARE_DELEGATE_OneParam(FOnGenerated, int32);
 
 /**
  * 
@@ -35,6 +35,10 @@ public:
 	//TArray<int32> DecodedLine;
 	int32 LineNbMaxToken = 256;
 	int32 NbMaxTokensAhead = 50;
+
+	int32 NbBatchGen = 10;
+
+
 
 	int32 NextTokenIndexToPlay = 0; // @TODO : Update from game thread and make thread safe
 

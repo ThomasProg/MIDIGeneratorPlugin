@@ -93,11 +93,11 @@ namespace Metasound
 
 			if (bIsThreaded)
 			{
-				GenThread.OnGenerated.BindLambda([this]()
+				GenThread.OnGenerated.BindLambda([this](int32 NewToken)
 					{
 						TokenModifSection.Lock();
 						bShouldUpdateTokens = true;
-						Tokens = GenThread.EncodedLine;
+						NewEncodedTokens.Add(NewToken);
 						TokenModifSection.Unlock();
 					});
 			}
@@ -123,11 +123,11 @@ namespace Metasound
 			if (!bIsThreaded)
 			{
 				Generator->Init();
-				Generator->Generate(120, Tokens);
+				Generator->Generate(120, NewEncodedTokens);
 			}
 
 			TokenModifSection.Lock();
-			Tokens = GenThread.EncodedLine;
+			NewEncodedTokens = GenThread.EncodedLine;
 			UpdateScheduledMidiEvents();
 			TokenModifSection.Unlock();
 
@@ -137,41 +137,40 @@ namespace Metasound
 		}
 
 		TArray<HarmonixMetasound::FMidiStreamEvent> EventsToPlay;
+		std::int32_t nextTokenToProcess = 0;
+		MidiConverterHandle converter = nullptr;
 
 		//int32 LastTick = 0;
 		void UpdateScheduledMidiEvents()
 		{
 			Outputs.MidiClock->GetDrivingMidiPlayCursorMgr()->LockForMidiDataChanges();
 
-			//std::int32_t i = UnplayedTokenIndex;
-			std::int32_t i = 0;
-
 			struct Args
 			{
-				std::int32_t& i;
-				std::int32_t& unplayedTokenIndex;
 				FAIGenOperator* self;
 
 				int32 LastTick = 0;
 			};
 
-			Args args{ i, UnplayedTokenIndex, this/*, LastTick*/ };
+			Args args{ this/*, LastTick*/ };
 
-			MidiConverterHandle converter = createMidiConverter();
+			if (converter == nullptr)
+				converter = createMidiConverter();
+
 			converterSetTokenizer(converter, GenThread.Generator.tok);
 			//converterSetTokenizer(converter, Generator->gen.tok);
 
 			//Outputs.MidiClock->LockForMidiDataChanges();
 
 			int32 currentTick = Outputs.MidiClock->GetCurrentHiResTick();
-			MidiFileData->Tracks[0].Empty();
+			//MidiFileData->Tracks[0].Empty();
 			//MidiFileData->Tracks[0].ClearEventsAfter(currentTick, false);
 			converterSetOnNote(converter, [](void* data, const Note& newNote)
 				{
 					Args& args = *(Args*)(data);
-					args.unplayedTokenIndex = args.i + 1;
+					//args.unplayedTokenIndex = args.i + 1;
 
-					//args.self->Cursor.p
+					//args.self->Cursor.pconverter
 
 					int32 Channel = 1;
 					int32 NoteNumber = newNote.pitch;
@@ -181,7 +180,8 @@ namespace Metasound
 					//int32 Tick = newNote.tick*180;
 					int32 Tick = newNote.tick * 100;
 
-					if (args.LastTick <= Tick)
+					if (args.self->MidiFileData->Tracks[0].GetUnsortedEvents().IsEmpty() or Tick >= args.self->MidiFileData->Tracks[0].GetEvents().Last().GetTick())
+					//if (args.LastTick <= Tick)
 					{
 						args.LastTick = Tick;
 
@@ -199,27 +199,38 @@ namespace Metasound
 
 				});
 
-			int32* outTokens = nullptr;
-			int32 outTokensSize = 0;
-			tokenizer_decodeIDs(GenThread.Generator.tok, Tokens.GetData(), Tokens.Num(), &outTokens, &outTokensSize);
-
-			while (i < outTokensSize)
+			int32* newDecodedTokens = nullptr;
+			int32 newDecodedTokensSize = 0;
+			tokenizer_decodeIDs(GenThread.Generator.tok, NewEncodedTokens.GetData(), NewEncodedTokens.Num(), &newDecodedTokens, &newDecodedTokensSize);
+			NewEncodedTokens.Empty();
+			for (int32 newDecodedTokenIndex = 0; newDecodedTokenIndex < newDecodedTokensSize; newDecodedTokenIndex++)
 			{
-				converterProcessToken(converter, outTokens, outTokensSize, i, &args);
-				i++;
+				DecodedTokens.Add(newDecodedTokens[newDecodedTokenIndex]);
 			}
 
-			ensureMsgf(!MidiFileData->Tracks[0].GetEvents().IsEmpty(), TEXT("Should not be empty!"));
-			//checkf((Index >= 0)& (Index < ArrayNum), TEXT("Array index out of bounds: %lld into an array of size %lld"), (long long)Index, (long long)ArrayNum); // & for one branch
+			tokenizer_decodeIDs_free(newDecodedTokens);
 
-			tokenizer_decodeIDs_free(outTokens);
+			std::int32_t i = nextTokenToProcess;
+			while (i < DecodedTokens.Num())
+			{
+
+				bool isSuccess = converterProcessToken(converter, DecodedTokens.GetData(), DecodedTokens.Num(), &i, &args);
+				if (isSuccess)
+				{
+					nextTokenToProcess = i;
+				}
+				else
+				{
+					i++; // ignore current token and continue
+				}
+			}
+
+			ensureMsgf(!MidiFileData->Tracks[0].GetUnsortedEvents().IsEmpty(), TEXT("Should not be empty!"));
+			//checkf((Index >= 0)& (Index < ArrayNum), TEXT("Array index out of bounds: %lld into an array of size %lld"), (long long)Index, (long long)ArrayNum); // & for one branch
 
 			//Outputs.MidiClock->MidiDataChangesComplete(FMidiPlayCursorMgr::EMidiChangePositionCorrectMode::MaintainTick);
 
-			destroyMidiConverter(converter);
-			MidiFileData->Tracks[0].Sort();
-			//MidiFileData->Sort
-
+			//MidiFileData->Tracks[0].Sort(); // TOO SLOW, O(n*log(n))
 
 			Outputs.MidiClock->GetDrivingMidiPlayCursorMgr()->MidiDataChangeComplete(FMidiPlayCursorMgr::EMidiChangePositionCorrectMode::MaintainTick);
 		}
@@ -231,48 +242,13 @@ namespace Metasound
 
 		~FAIGenOperator()
 		{
+			destroyMidiConverter(converter);
 			GenThread.Stop();
 			//if (Generator != nullptr)
 			//{
 			//	Generator->Deinit();
 			//}
 		}
-
-		class FCursor final : public FMidiPlayCursor
-		{
-		public:
-			FCursor();
-
-			virtual ~FCursor() override;
-
-			void SetClock(const TSharedPtr<const HarmonixMetasound::FMidiClock, ESPMode::NotThreadSafe>& NewClock);
-
-			void SetInterval(const Harmonix::FMusicTimeInterval& NewInterval);
-
-			Harmonix::FMusicTimeInterval GetInterval() const { return Interval; }
-
-			struct FPulseTime
-			{
-				int32 AudioBlockFrame;
-				int32 MidiTick;
-			};
-
-			bool Pop(FPulseTime& PulseTime);
-
-		private:
-			void Push(FPulseTime&& PulseTime);
-
-			virtual void AdvanceThruTick(int32 Tick, bool IsPreRoll) override;
-
-			virtual void OnTimeSig(int32 TrackIndex, int32 Tick, int32 Numerator, int32 Denominator, bool IsPreroll) override;
-
-			TWeakPtr<const HarmonixMetasound::FMidiClock, ESPMode::NotThreadSafe> Clock;
-			Harmonix::FMusicTimeInterval Interval{};
-			TSpscQueue<FPulseTime> PulsesSinceLastProcess;
-			int32 QueueSize{ 0 };
-			FTimeSignature CurrentTimeSignature{};
-			FMusicTimestamp NextPulseTimestamp{ -1, -1 };
-		};
 
 		// Helper function for constructing vertex interface
 		static const FVertexInterface& DeclareVertexInterface()
@@ -403,17 +379,6 @@ namespace Metasound
 
 			InitTransportIfNeeded();
 
-			//if (Outputs.MidiClock->DoesLoop() != *LoopInPin || CurrentMidiFile != MidiAssetInPin->GetMidiProxy())
-			//{
-			//	SetupNewMidiFile(MidiAssetInPin->GetMidiProxy());
-			//}
-
-			//InitTransportIfNeeded();
-
-
-
-
-
 			float speed = 1.0;
 
 			Outputs.MidiClock->AddSpeedChangeToBlock({ 0, 0.0f, speed });
@@ -537,8 +502,9 @@ namespace Metasound
 
 		bool bIsThreaded = true;
 		TWeakObjectPtr<UMIDIGenerator> Generator = nullptr;
-		TArray<int32> Tokens;
-		FCursor Cursor;
+		TArray<int32> NewEncodedTokens;
+		TArray<int32> DecodedTokens;
+
 		FSampleCount BlockSize = 0;
 		int32 PrerollBars = 8;
 		int32 UnplayedTokenIndex = 0;
@@ -559,105 +525,6 @@ namespace Metasound
 			|| GetTransportState() == HarmonixMetasound::EMusicPlayerTransportState::Continuing;
 	}
 
-
-	FAIGenOperator::FCursor::FCursor()
-	{
-		SetMessageFilter(EFilterPassFlags::TimeSig);
-	}
-
-	FAIGenOperator::FCursor::~FCursor()
-	{
-		// NB: If we let ~FMidiPlayCursor do this, we get warnings for potentially bad access
-		SetClock(nullptr);
-	}
-
-	void FAIGenOperator::FCursor::SetClock(const TSharedPtr<const HarmonixMetasound::FMidiClock, ESPMode::NotThreadSafe>& NewClock)
-	{
-		if (Clock == NewClock)
-		{
-			return;
-		}
-
-		// unregister if we already have a clock
-		if (const auto PinnedClock = Clock.Pin())
-		{
-			PinnedClock->UnregisterPlayCursor(this);
-		}
-
-		// register the new clock if we were given one
-		if (NewClock.IsValid())
-		{
-			NewClock->RegisterHiResPlayCursor(this);
-		}
-
-		Clock = NewClock;
-	}
-
-	void FAIGenOperator::FCursor::SetInterval(const Harmonix::FMusicTimeInterval& NewInterval)
-	{
-		Interval = NewInterval;
-
-		// Multiplier should be >= 1
-		Interval.IntervalMultiplier = FMath::Max(Interval.IntervalMultiplier, static_cast<uint16>(1));
-	}
-
-	bool FAIGenOperator::FCursor::Pop(FPulseTime& PulseTime)
-	{
-		if (PulsesSinceLastProcess.Dequeue(PulseTime))
-		{
-			--QueueSize;
-			return true;
-		}
-
-		return false;
-	}
-
-	void FAIGenOperator::FCursor::Push(FPulseTime&& PulseTime)
-	{
-		constexpr int32 MaxQueueSize = 1024; // just to keep the queue from infinitely growing if we stop draining it
-		if (QueueSize < MaxQueueSize)
-		{
-			PulsesSinceLastProcess.Enqueue(MoveTemp(PulseTime));
-			++QueueSize;
-		}
-	}
-
-	void FAIGenOperator::FCursor::AdvanceThruTick(int32 Tick, bool IsPreRoll)
-	{
-		FMidiPlayCursor::AdvanceThruTick(Tick, IsPreRoll);
-
-		if (!NextPulseTimestamp.IsValid())
-		{
-			return;
-		}
-
-		check(Clock.IsValid()); // if we're here and we don't have a clock, we have problems
-		const auto PinnedClock = Clock.Pin();
-		int32 NextPulseTick = PinnedClock->GetBarMap().MusicTimestampToTick(NextPulseTimestamp);
-
-		while (CurrentTick >= NextPulseTick)
-		{
-			Push({ PinnedClock->GetCurrentBlockFrameIndex(), NextPulseTick });
-
-			IncrementTimestampByInterval(NextPulseTimestamp, Interval, CurrentTimeSignature);
-
-			NextPulseTick = PinnedClock->GetBarMap().MusicTimestampToTick(NextPulseTimestamp);
-		}
-	}
-
-	void FAIGenOperator::FCursor::OnTimeSig(int32 TrackIndex, int32 Tick, int32 Numerator, int32 Denominator, bool IsPreroll)
-	{
-		CurrentTimeSignature.Numerator = Numerator;
-		CurrentTimeSignature.Denominator = Denominator;
-
-		check(Clock.IsValid()); // if we're here and we don't have a clock, we have problems
-		const auto PinnedClock = Clock.Pin();
-		// Time sig changes will come on the downbeat, and if we change time signature,
-		// we want to reset the pulse, so the next pulse is now plus the offset
-		NextPulseTimestamp = PinnedClock->GetBarMap().TickToMusicTimestamp(Tick);
-		IncrementTimestampByOffset(NextPulseTimestamp, Interval, CurrentTimeSignature);
-	}
-
 	// Standard 1- or 2-byte MIDI message:
 	void FAIGenOperator::OnMidiMessage(int32 TrackIndex, int32 Tick, uint8 Status, uint8 Data1, uint8 Data2, bool IsPreroll)
 	{
@@ -671,121 +538,6 @@ namespace Metasound
 			Outputs.MidiStream->AddMidiEvent(MidiEvent);
 		}
 	}
-	//// Text, Copyright, TrackName, InstName, Lyric, Marker, CuePoint meta-event:
-	////  "type" is the type of meta-event (constants defined in
-	////  MidiFileConstants.h)
-	//void FAIGenOperator::OnText(int32 TrackIndex, int32 Tick, int32 TextIndex, const FString& Str, uint8 Type, bool IsPreroll)
-	//{
-	//	if (!IsPreroll && IsPlaying())
-	//	{
-	//		HarmonixMetasound::FMidiStreamEvent MidiEvent(this, FMidiMsg::CreateText(TextIndex, Type));
-	//		MidiEvent.BlockSampleFrameIndex = Outputs.MidiClock->GetCurrentBlockFrameIndex();
-	//		MidiEvent.AuthoredMidiTick = Tick;
-	//		MidiEvent.CurrentMidiTick = Tick;
-	//		MidiEvent.TrackIndex = TrackIndex;
-	//		Outputs.MidiStream->AddMidiEvent(MidiEvent);
-	//	}
-	//}
-	//// Tempo Change meta-event:
-	////  tempo is in microseconds per quarter-note
-	//void FAIGenOperator::OnTempo(int32 TrackIndex, int32 Tick, int32 Tempo, bool IsPreroll)
-	//{
-	//	if (IsPlaying())
-	//	{
-	//		HarmonixMetasound::FMidiStreamEvent MidiEvent(this, FMidiMsg((int32)Tempo));
-	//		MidiEvent.BlockSampleFrameIndex = Outputs.MidiClock->GetCurrentBlockFrameIndex();
-	//		MidiEvent.AuthoredMidiTick = Tick;
-	//		MidiEvent.CurrentMidiTick = Tick;
-	//		MidiEvent.TrackIndex = TrackIndex;
-	//		Outputs.MidiStream->AddMidiEvent(MidiEvent);
-	//	}
-	//}
-	////// Time Signature meta-event:
-	//////   time signature is numer/denom
-	////void FAIGenOperator::OnTimeSig(int32 TrackIndex, int32 Tick, int32 Numerator, int32 Denominator, bool IsPreroll)
-	////{
-
-	////}
-	////// Called when the look ahead amount changes or midi playback resets...
-	////void FAIGenOperator::OnReset()
-	////{
-
-	//// Called when a noteOn happens during a pre-roll. Example usage...
-	//// A cursor playing a synth that supports note-ons with start offsets into playback may
-	//// pass this note on to the synth with the preRollMs as the start offset.
-	//void FAIGenOperator::OnPreRollNoteOn(int32 TrackIndex, int32 EventTick, int32 Tick, float PreRollMs, uint8 Status, uint8 Data1, uint8 Data2)
-	//{
-	//	if (IsPlaying())
-	//	{
-	//		HarmonixMetasound::FMidiStreamEvent MidiEvent(this, FMidiMsg(Status, Data1, Data2));
-	//		MidiEvent.BlockSampleFrameIndex = Outputs.MidiClock->GetCurrentBlockFrameIndex();
-	//		MidiEvent.AuthoredMidiTick = EventTick;
-	//		MidiEvent.CurrentMidiTick = Tick;
-	//		MidiEvent.TrackIndex = TrackIndex;
-	//		Outputs.MidiStream->AddMidiEvent(MidiEvent);
-	//	}
-	//}
-
-	////void FAIGenOperator::Reset(const FResetParams& Params)
-	////{
-	////	BlockSize = Params.OperatorSettings.GetNumFramesPerBlock();
-	////	//CurrentBlockSpanStart = 0;
-
-	////	Outputs.MidiStream->SetClock(*Outputs.MidiClock);
-	////	Outputs.MidiClock->ResetAndStart(0, true);
-
-	////	//NeedsTransportInit = true;
-	////}
-
-	//void FAIGenOperator::Reset(bool ForceNoBroadcast /*= false*/)
-	//{
-	//	FMidiPlayCursor::Reset(ForceNoBroadcast);
-	//}
-
-	//void FAIGenOperator::OnLoop(int32 LoopStartTick, int32 LoopEndTick)
-	//{
-	//	//TRACE_BOOKMARK(TEXT("Midi Looping"));
-	//	FMidiPlayCursor::OnLoop(LoopStartTick, LoopEndTick);
-	//}
-
-	//void FAIGenOperator::SeekToTick(int32 Tick)
-	//{
-	//	//TRACE_BOOKMARK(TEXT("Midi Seek To Tick"));
-	//	FMidiPlayCursor::SeekToTick(Tick);
-
-	//	//if (IsPlaying())
-	//	//{
-	//	//	FMidiStreamEvent MidiEvent(this, bKillVoicesOnSeek ? FMidiMsg::CreateAllNotesKill() : FMidiMsg::CreateAllNotesOff());
-	//	//	MidiEvent.BlockSampleFrameIndex = MidiClockOut->GetCurrentBlockFrameIndex();
-	//	//	MidiEvent.AuthoredMidiTick = MidiClockOut->GetCurrentHiResTick();
-	//	//	MidiEvent.CurrentMidiTick = MidiClockOut->GetCurrentHiResTick();
-	//	//	MidiEvent.TrackIndex = 0;
-	//	//	MidiOutPin->AddMidiEvent(MidiEvent);
-	//	//}
-	//}
-
-	//void FAIGenOperator::SeekThruTick(int32 Tick)
-	//{
-	//	//TRACE_BOOKMARK(TEXT("Midi Seek Thru Tick"));
-	//	FMidiPlayCursor::SeekThruTick(Tick);
-
-	//	//if (IsPlaying())
-	//	//{
-	//	//	FMidiStreamEvent MidiEvent(this, bKillVoicesOnSeek ? FMidiMsg::CreateAllNotesKill() : FMidiMsg::CreateAllNotesOff());
-	//	//	MidiEvent.BlockSampleFrameIndex = MidiClockOut->GetCurrentBlockFrameIndex();
-	//	//	MidiEvent.AuthoredMidiTick = MidiClockOut->GetCurrentHiResTick();
-	//	//	MidiEvent.CurrentMidiTick = MidiClockOut->GetCurrentHiResTick();
-	//	//	MidiEvent.TrackIndex = 0;
-	//	//	MidiOutPin->AddMidiEvent(MidiEvent);
-	//	//}
-	//}
-
-	//void FAIGenOperator::AdvanceThruTick(int32 Tick, bool IsPreRoll)
-	//{
-	//	FMidiPlayCursor::AdvanceThruTick(Tick, IsPreRoll);
-	//}
-
-
 
 	// Node Class - Inheriting from FNodeFacade is recommended for nodes that have a static FVertexInterface
 	class FAIGenNode : public FNodeFacade

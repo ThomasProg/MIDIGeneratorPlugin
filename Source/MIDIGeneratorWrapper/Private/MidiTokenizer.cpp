@@ -61,7 +61,8 @@ void FMidiConverter::update()
 
     while (i < tokens.Num())
     {
-        converterProcessToken(converter, tokens.GetData(), tokens.Num(), i, &args);
+        int j = i;
+        converterProcessToken(converter, tokens.GetData(), tokens.Num(), &j, &args);
         //converter.processToken(tokens, i, &args);
         i++;
     }
