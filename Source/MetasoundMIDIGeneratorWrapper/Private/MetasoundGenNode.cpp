@@ -93,11 +93,14 @@ namespace Metasound
 
 			if (bIsThreaded)
 			{
-				GenThread.OnGenerated.BindLambda([this](int32 NewToken)
+				GenThread.OnGenerated.BindLambda([this](int32* Tokens, int32 NbTokens, int32 NbGeneratedTokens)
 					{
 						TokenModifSection.Lock();
 						bShouldUpdateTokens = true;
-						NewEncodedTokens.Add(NewToken);
+						for (int32 i = NbTokens - NbGeneratedTokens; i < NbTokens; i++)
+						{
+							NewEncodedTokens.Add(Tokens[i]);
+						}
 						TokenModifSection.Unlock();
 					});
 			}

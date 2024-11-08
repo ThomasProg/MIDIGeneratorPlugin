@@ -62,11 +62,7 @@ void FGenThread::TryInsertTokenGroup()
 
 uint32 FGenThread::Run() 
 {
-	while (!bShutdown) 
 	{
-		/* Work on a dedicated thread */
-		//Generator->Generate(10, Tokens);
-
 		TArray<int32> Context;
 		int32 start = FMath::Max(0, EncodedLine.Num() - LineNbMaxToken);
 		for (int32 i = start; i < EncodedLine.Num(); i++)
@@ -75,19 +71,30 @@ uint32 FGenThread::Run()
 		}
 
 		batch_set(batch, Context.GetData(), Context.Num(), start);
+	}
 
-		generator_generateNextToken(Generator.generator, runInstance);
+	ensureMsgf(NbBatchGen < LineNbMaxToken, TEXT("Reduce NbBatchGen!"));
+
+	while (!bShutdown) 
+	{
+		/* Work on a dedicated thread */
+		//Generator->Generate(10, Tokens);
+
+		for (int32 i = 0; i < NbBatchGen; i++)
+		{
+			generator_generateNextToken(Generator.generator, runInstance);
+		}
 
 		int32* tokens;
 		int32 tokensSize;
 		batch_getEncodedTokens(batch, &tokens, &tokensSize);
 
 		//int32 newToken = generateNextToken(Context);
-		int32 newToken = tokens[tokensSize - 1];
-		EncodedLine.Add(newToken);
+		//int32 newToken = tokens[tokensSize - 1];
+		//EncodedLine.Add(newToken);
 
 
-		TryInsertTokenGroup();
+		//TryInsertTokenGroup();
 
 
 
@@ -108,7 +115,7 @@ uint32 FGenThread::Run()
 		//}
 
 		if (!bShutdown)
-			OnGenerated.ExecuteIfBound(newToken);
+			OnGenerated.ExecuteIfBound(tokens, tokensSize, NbBatchGen);
 	}
 
 	return 0;

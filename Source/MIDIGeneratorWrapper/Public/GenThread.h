@@ -5,7 +5,7 @@
 #include "CoreMinimal.h"
 #include "MIDIGenerator.h"
 
-DECLARE_DELEGATE_OneParam(FOnGenerated, int32);
+DECLARE_DELEGATE_ThreeParams(FOnGenerated, int32* /*tokens*/, int32 /*tokensSize*/, int32 /*nbGeneratedTokens*/);
 
 /**
  * 
@@ -36,7 +36,7 @@ public:
 	int32 LineNbMaxToken = 256;
 	int32 NbMaxTokensAhead = 50;
 
-	int32 NbBatchGen = 10;
+	int32 NbBatchGen = 1;
 
 
 
