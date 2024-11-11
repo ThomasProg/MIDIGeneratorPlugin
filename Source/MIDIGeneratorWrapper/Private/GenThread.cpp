@@ -10,7 +10,7 @@ void FGenThread::Start(const FString& InTokenizerPath, const FString& InModelPat
 	this->ModelPath = InModelPath;
 	EncodedLine = InTokens;
 
-	Thread = FRunnableThread::Create(this, TEXT("GenThread"));
+	Thread = FRunnableThread::Create(this, TEXT("GenThread"), 0, TPri_TimeCritical);
 }
 
 FGenThread::~FGenThread()
@@ -27,7 +27,8 @@ FGenThread::~FGenThread()
 bool FGenThread::Init() 
 {
 	Generator.Init(TokenizerPath, ModelPath);
-	runInstance = createRunInstance();
+	runInstance = generator_createRunInstance(Generator.generator);
+	//runInstance = createRunInstance();
 	batch = createBatch();
 	runInstance_addBatch(runInstance, batch);
 	batch_set(batch, EncodedLine.GetData(), EncodedLine.Num(), 0);
@@ -62,11 +63,7 @@ void FGenThread::TryInsertTokenGroup()
 
 uint32 FGenThread::Run() 
 {
-	while (!bShutdown) 
 	{
-		/* Work on a dedicated thread */
-		//Generator->Generate(10, Tokens);
-
 		TArray<int32> Context;
 		int32 start = FMath::Max(0, EncodedLine.Num() - LineNbMaxToken);
 		for (int32 i = start; i < EncodedLine.Num(); i++)
@@ -75,15 +72,24 @@ uint32 FGenThread::Run()
 		}
 
 		batch_set(batch, Context.GetData(), Context.Num(), start);
+	}
+
+	while (!bShutdown) 
+	{
+		/* Work on a dedicated thread */
+		//Generator->Generate(10, Tokens);
+
+
 
 		generator_generateNextToken(Generator.generator, runInstance);
 
-		int32* tokens;
-		int32 tokensSize;
-		batch_getEncodedTokens(batch, &tokens, &tokensSize);
+		//int32* tokens;
+		//int32 tokensSize;
+		//batch_getEncodedTokens(batch, &tokens, &tokensSize);
 
 		//int32 newToken = generateNextToken(Context);
-		int32 newToken = tokens[tokensSize - 1];
+		//int32 newToken = tokens[tokensSize - 1];
+		int32 newToken = batch_getLastGeneratedToken(batch);
 		EncodedLine.Add(newToken);
 
 

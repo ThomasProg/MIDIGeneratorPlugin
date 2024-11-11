@@ -139,6 +139,7 @@ namespace Metasound
 		TArray<HarmonixMetasound::FMidiStreamEvent> EventsToPlay;
 		std::int32_t nextTokenToProcess = 0;
 		MidiConverterHandle converter = nullptr;
+		int32 AddedTicks = 0;
 
 		//int32 LastTick = 0;
 		void UpdateScheduledMidiEvents()
@@ -163,6 +164,14 @@ namespace Metasound
 			//Outputs.MidiClock->LockForMidiDataChanges();
 
 			int32 currentTick = Outputs.MidiClock->GetCurrentHiResTick();
+
+
+			if (GEngine && MidiFileData->Tracks[0].GetNumEvents() > 0)
+			{
+				int32 lastTick = MidiFileData->Tracks[0].GetEvents().Last().GetTick();
+				GEngine->AddOnScreenDebugMessage(-1, 15.0f, FColor::Yellow, FString::Printf(TEXT("Ticks : %d : %d / %d"), lastTick - currentTick, currentTick, lastTick));
+			}
+
 			//MidiFileData->Tracks[0].Empty();
 			//MidiFileData->Tracks[0].ClearEventsAfter(currentTick, false);
 			converterSetOnNote(converter, [](void* data, const Note& newNote)
@@ -177,8 +186,17 @@ namespace Metasound
 					int32 Velocity = newNote.velocity;
 
 					int32 Track = 0;
+
+					int32 CurrentTick = args.self->Outputs.MidiClock->GetCurrentHiResTick();
+
 					//int32 Tick = newNote.tick*180;
-					int32 Tick = newNote.tick * 100;
+					int32 Tick = newNote.tick * 100 + args.self->AddedTicks;
+
+					if (Tick < CurrentTick)
+					{
+						args.self->AddedTicks += CurrentTick - Tick;
+						Tick = CurrentTick;
+					}
 
 					if (args.self->MidiFileData->Tracks[0].GetUnsortedEvents().IsEmpty() or Tick >= args.self->MidiFileData->Tracks[0].GetEvents().Last().GetTick())
 					//if (args.LastTick <= Tick)
@@ -365,12 +383,28 @@ namespace Metasound
 		FMidiVoiceGeneratorBase VoiceGenerator{};
 		void Execute()
 		{
+			int32 currentTick = Outputs.MidiClock->GetCurrentHiResTick();
+			int32 lastTick = MidiFileData->Tracks[0].GetEvents().Last().GetTick();
+
 			if (bShouldUpdateTokens)
 			{
 				TokenModifSection.Lock();
 				UpdateScheduledMidiEvents();
 				bShouldUpdateTokens = false;
 				TokenModifSection.Unlock();
+			}
+
+			// Block until music is generated
+			while (currentTick > lastTick)
+			{
+				if (bShouldUpdateTokens)
+				{
+					TokenModifSection.Lock();
+					UpdateScheduledMidiEvents();
+					bShouldUpdateTokens = false;
+					TokenModifSection.Unlock();
+				}
+				lastTick = MidiFileData->Tracks[0].GetEvents().Last().GetTick();
 			}
 
 			Outputs.MidiStream->PrepareBlock();
