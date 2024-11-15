@@ -3,6 +3,11 @@
 #include "fwd.h"
 #include "note.h"
 
+extern "C"
+{
+    API_EXPORT std::int64_t computeMultiDimIndex(std::int64_t* shape, std::int64_t* indices);
+}
+
 // Env
 extern "C" 
 {
@@ -19,7 +24,13 @@ extern "C"
     API_EXPORT void generator_loadOnnxModel(MusicGeneratorHandle generator, EnvHandle env, const char* path);
     API_EXPORT void generator_generateNextToken(MusicGeneratorHandle generator, RunInstanceHandle runInstance);
 
+    API_EXPORT void generator_preGenerate(MusicGeneratorHandle generator, RunInstanceHandle runInstance);
+    API_EXPORT void generator_generate(MusicGeneratorHandle generator, RunInstanceHandle runInstance);
+    API_EXPORT void generator_postGenerate(MusicGeneratorHandle generator, RunInstanceHandle runInstance);
+
     API_EXPORT void generator_setConfig(MusicGeneratorHandle generator, int64_t num_attention_heads, int64_t hidden_size, int64_t num_layer);
+
+    API_EXPORT RunInstance* generator_createRunInstance(MusicGeneratorHandle generator); 
 }
 
 // Redirector
@@ -52,6 +63,8 @@ extern "C"
     API_EXPORT void batch_pop(BatchHandle batch);
     API_EXPORT void batch_set(BatchHandle batch, DataType* inputTokens, std::int32_t nbTokens, std::int32_t fromPos);
 
+    API_EXPORT std::int32_t batch_getLastGeneratedToken(BatchHandle batch);
+
     API_EXPORT std::int32_t batch_size(BatchHandle batch);
     API_EXPORT void batch_getEncodedTokens(BatchHandle batch, DataType** outEncodedTokens, std::int32_t* outNbTokens);
 }
@@ -65,7 +78,14 @@ extern "C"
     API_EXPORT void runInstance_addBatch(RunInstanceHandle runInstance, BatchHandle batch);
     API_EXPORT void runInstance_removeBatch(RunInstanceHandle runInstance, BatchHandle batch);
     API_EXPORT std::int32_t runInstance_nbBatches(RunInstanceHandle runInstance);
+    API_EXPORT void runInstance_setMaxInputLength(RunInstanceHandle runInstance, std::int32_t newMaxInputLength);
 
+    API_EXPORT void runInstance_reset(RunInstanceHandle runInstance);
+    API_EXPORT const float* runInstance_getPastTensor(RunInstanceHandle runInstance, std::int32_t index);
+    API_EXPORT const float* runInstance_getPresentTensor(RunInstanceHandle runInstance, std::int32_t index);
+
+    API_EXPORT void runInstance_getPresentTensorShape(RunInstanceHandle runInstance, MusicGeneratorHandle generator, std::int64_t* outShape);
+    API_EXPORT void runInstance_getPastTensorShape(RunInstanceHandle runInstance, MusicGeneratorHandle generator, std::int64_t* outShape);
 }
 
 // Tokenizer

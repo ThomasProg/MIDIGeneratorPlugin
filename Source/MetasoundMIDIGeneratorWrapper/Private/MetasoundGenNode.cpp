@@ -27,6 +27,7 @@
 #include "HarmonixMetasound/DataTypes/MidiClock.h"
 #include "HarmonixMetasound/DataTypes/MusicTimeInterval.h"
 #include "MIDIGenerator.h"
+#include "MetasoundMIDIGenerator.h"
 #include "GenThread.h"
 
 // Required for ensuring the node is supported by all languages in engine. Must be unique per MetaSound.
@@ -59,9 +60,10 @@ namespace Metasound
 		// Constructor
 		FAIGenOperator(const Metasound::FBuildOperatorParams& InParams,
 			const HarmonixMetasound::FMidiClockReadRef& InMidiClock,
-			const HarmonixMetasound::FMusicTransportEventStreamReadRef& InTransport)
+			const HarmonixMetasound::FMusicTransportEventStreamReadRef& InTransport,
+			const Metasound::FMIDIGeneratorZZZReadRef& InGenerator)
 			: FMusicTransportControllable(HarmonixMetasound::EMusicPlayerTransportState::Prepared)
-			, Inputs{ InMidiClock, InTransport }
+			, Inputs{ InMidiClock, InTransport, InGenerator }
 			, Outputs{ HarmonixMetasound::FMidiStreamWriteRef::CreateNew(), HarmonixMetasound::FMidiClockWriteRef::CreateNew(InParams.OperatorSettings) }
 			, BlockSize(InParams.OperatorSettings.GetNumFramesPerBlock())
 		{
@@ -84,62 +86,49 @@ namespace Metasound
 			Outputs.MidiClock->RegisterHiResPlayCursor(this);
 			Outputs.MidiStream->SetClock(*Outputs.MidiClock);
 			//Outputs.MidiStream->SetTicksPerQuarterNote(1);
-			
-
-			if ((!bIsThreaded) && Generator == nullptr)
-			{
-				Generator = NewObject<UMIDIGenerator>();
-			}
-
-			if (bIsThreaded)
-			{
-				GenThread.OnGenerated.BindLambda([this](int32 NewToken)
-					{
-						TokenModifSection.Lock();
-						bShouldUpdateTokens = true;
-						NewEncodedTokens.Add(NewToken);
-						TokenModifSection.Unlock();
-					});
-			}
-
-			FString TokPath = "C:/Users/thoma/Documents/Unreal Projects/MIDITokCpp/tokenizer.json";
-			FString ModelPath = "C:/Users/thoma/Documents/Unreal Projects/MIDITokCpp/onnx_model_path/gpt2-midi-model_past.onnx";
-			int32 input_ids[] = {
-			942,    65,  1579,  1842,   616,    46,  3032,  1507,   319,  1447,
-			12384,  1016,  1877,   319, 15263,  3396,   302,  2667,  1807,  3388,
-			2649,  1173,    50,   967,  1621,   256,  1564,   653,  1701,   377
-			};
-			int32 size = sizeof(input_ids) / sizeof(*input_ids);
-
-			TArray<int32> EncodedTokens;
-			EncodedTokens.SetNum(size);
-			for (int i = 0; i < size; i++)
-			{
-				EncodedTokens[i] = input_ids[i];
-			}
-
-			GenThread.Start(TokPath, ModelPath, EncodedTokens);
-
-			if (!bIsThreaded)
-			{
-				Generator->Init();
-				Generator->Generate(120, NewEncodedTokens);
-			}
-
-			TokenModifSection.Lock();
-			NewEncodedTokens = GenThread.EncodedLine;
-			UpdateScheduledMidiEvents();
-			TokenModifSection.Unlock();
-
-			Reset(InParams);
 
 			Outputs.MidiClock->AttachToMidiResource(MidiFileData);
+
+			TryUpdateGenThreadInput();
 		}
 
 		TArray<HarmonixMetasound::FMidiStreamEvent> EventsToPlay;
 		std::int32_t nextTokenToProcess = 0;
 		MidiConverterHandle converter = nullptr;
 		int32 AddedTicks = 0;
+
+		void TryUpdateGenThreadInput()
+		{
+			if (Inputs.Generator.Get() != nullptr && Inputs.Generator->GetProxy().IsValid() && GenThread != Inputs.Generator->GetProxy()->MidiGenerator)
+			{
+				if (GenThread != nullptr)
+				{
+					TokenModifSection.Lock();
+					GenThread->OnGenerated.Unbind();
+					NewEncodedTokens.Empty();
+					TokenModifSection.Unlock();
+				}
+
+
+				GenThread = Inputs.Generator->GetProxy()->MidiGenerator;
+
+				if (GenThread != nullptr)
+				{
+					GenThread->OnGenerated.BindLambda([this](int32 NewToken)
+						{
+							TokenModifSection.Lock();
+							bShouldUpdateTokens = true;
+							NewEncodedTokens.Add(NewToken);
+							TokenModifSection.Unlock();
+						});
+
+					TokenModifSection.Lock();
+					NewEncodedTokens = GenThread->EncodedLine;
+					UpdateScheduledMidiEvents();
+					TokenModifSection.Unlock();
+				}
+			}
+		}
 
 		//int32 LastTick = 0;
 		void UpdateScheduledMidiEvents()
@@ -158,7 +147,7 @@ namespace Metasound
 			if (converter == nullptr)
 				converter = createMidiConverter();
 
-			converterSetTokenizer(converter, GenThread.Generator.tok);
+			converterSetTokenizer(converter, GenThread->Generator.tok);
 			//converterSetTokenizer(converter, Generator->gen.tok);
 
 			//Outputs.MidiClock->LockForMidiDataChanges();
@@ -166,11 +155,11 @@ namespace Metasound
 			int32 currentTick = Outputs.MidiClock->GetCurrentHiResTick();
 
 
-			if (GEngine && MidiFileData->Tracks[0].GetNumEvents() > 0)
-			{
-				int32 lastTick = MidiFileData->Tracks[0].GetEvents().Last().GetTick();
-				GEngine->AddOnScreenDebugMessage(-1, 15.0f, FColor::Yellow, FString::Printf(TEXT("Ticks : %d : %d / %d"), lastTick - currentTick, currentTick, lastTick));
-			}
+			//if (GEngine && MidiFileData->Tracks[0].GetNumEvents() > 0)
+			//{
+			//	int32 lastTick = MidiFileData->Tracks[0].GetEvents().Last().GetTick();
+			//	GEngine->AddOnScreenDebugMessage(-1, 15.0f, FColor::Yellow, FString::Printf(TEXT("Ticks : %d : %d / %d"), lastTick - currentTick, currentTick, lastTick));
+			//}
 
 			//MidiFileData->Tracks[0].Empty();
 			//MidiFileData->Tracks[0].ClearEventsAfter(currentTick, false);
@@ -219,7 +208,7 @@ namespace Metasound
 
 			int32* newDecodedTokens = nullptr;
 			int32 newDecodedTokensSize = 0;
-			tokenizer_decodeIDs(GenThread.Generator.tok, NewEncodedTokens.GetData(), NewEncodedTokens.Num(), &newDecodedTokens, &newDecodedTokensSize);
+			tokenizer_decodeIDs(GenThread->Generator.tok, NewEncodedTokens.GetData(), NewEncodedTokens.Num(), &newDecodedTokens, &newDecodedTokensSize);
 			NewEncodedTokens.Empty();
 			for (int32 newDecodedTokenIndex = 0; newDecodedTokenIndex < newDecodedTokensSize; newDecodedTokenIndex++)
 			{
@@ -253,19 +242,13 @@ namespace Metasound
 			Outputs.MidiClock->GetDrivingMidiPlayCursorMgr()->MidiDataChangeComplete(FMidiPlayCursorMgr::EMidiChangePositionCorrectMode::MaintainTick);
 		}
 
-		void Reset(const FResetParams&)
-		{
-			//Cursor.SetClock(Inputs.Clock->AsShared());
-		}
-
 		~FAIGenOperator()
 		{
 			destroyMidiConverter(converter);
-			GenThread.Stop();
-			//if (Generator != nullptr)
-			//{
-			//	Generator->Deinit();
-			//}
+			if (GenThread.IsValid())
+			{
+				GenThread->Stop();
+			}
 		}
 
 		// Helper function for constructing vertex interface
@@ -274,7 +257,8 @@ namespace Metasound
 			static const FVertexInterface Interface(
 				FInputVertexInterface(
 					TInputDataVertex<HarmonixMetasound::FMusicTransportEventStream>(METASOUND_GET_PARAM_NAME_AND_METADATA(AIGen::Inputs::Transport)),
-					TInputDataVertex<HarmonixMetasound::FMidiClock>(METASOUND_GET_PARAM_NAME_AND_METADATA(AIGen::Inputs::Clock))
+					TInputDataVertex<HarmonixMetasound::FMidiClock>(METASOUND_GET_PARAM_NAME_AND_METADATA(AIGen::Inputs::Clock)),
+					TInputDataVertex<Metasound::FMIDIGeneratorZZZ>("Generator", FDataVertexMetadata{ FText::FromString("Generates"), FText::FromString("Generator") })
 				),
 				FOutputVertexInterface(
 					TOutputDataVertex<HarmonixMetasound::FMidiStream>(METASOUND_GET_PARAM_NAME_AND_METADATA(AIGen::Outputs::MidiStream)),
@@ -318,6 +302,7 @@ namespace Metasound
 		{
 			HarmonixMetasound::FMidiClockReadRef Clock;
 			HarmonixMetasound::FMusicTransportEventStreamReadRef Transport;
+			Metasound::FMIDIGeneratorZZZReadRef Generator;
 		};
 
 		struct FOutputs
@@ -331,6 +316,7 @@ namespace Metasound
 		{
 			InOutVertexData.BindReadVertex("Clock", Inputs.Clock);
 			InOutVertexData.BindReadVertex("Transport", Inputs.Transport);
+			InOutVertexData.BindReadVertex("Generator", Inputs.Generator);
 
 			//SetClock(Inputs.Clock->AsShared());
 			//Outputs.MidiClock->AttachToTimeAuthority(*Inputs.Clock);
@@ -340,32 +326,8 @@ namespace Metasound
 
 		virtual void BindOutputs(FOutputVertexInterfaceData& InOutVertexData) override
 		{
-			InOutVertexData.BindReadVertex("MidiStream", Outputs.MidiStream);
-			InOutVertexData.BindReadVertex("MidiClock", Outputs.MidiClock);
-		}
-
-
-
-		// Allows MetaSound graph to interact with your node's inputs
-		virtual FDataReferenceCollection GetInputs() const override
-		{
-			FDataReferenceCollection InputDataReferences;
-
-			InputDataReferences.AddDataReadReference(METASOUND_GET_PARAM_NAME(AIGen::Inputs::Clock), Inputs.Clock);
-			InputDataReferences.AddDataReadReference(METASOUND_GET_PARAM_NAME(AIGen::Inputs::Transport), Inputs.Transport);
-
-			return InputDataReferences;
-		}
-
-		// Allows MetaSound graph to interact with your node's outputs
-		virtual FDataReferenceCollection GetOutputs() const override
-		{
-			FDataReferenceCollection OutputDataReferences;
-
-			OutputDataReferences.AddDataReadReference(METASOUND_GET_PARAM_NAME(AIGen::Outputs::MidiStream), Outputs.MidiStream);
-			OutputDataReferences.AddDataReadReference(METASOUND_GET_PARAM_NAME(AIGen::Outputs::MidiClock), Outputs.MidiClock);
-
-			return OutputDataReferences;
+			InOutVertexData.BindWriteVertex("MidiStream", Outputs.MidiStream);
+			InOutVertexData.BindWriteVertex("MidiClock", Outputs.MidiClock);
 		}
 
 		static TUniquePtr<Metasound::IOperator> CreateOperator(const FBuildOperatorParams& InParams, FBuildResults& OutResults)
@@ -374,7 +336,8 @@ namespace Metasound
 			const FInputVertexInterfaceData& InputData = InParams.InputData;
 			HarmonixMetasound::FMusicTransportEventStreamReadRef InTransport = InputData.GetOrConstructDataReadReference<HarmonixMetasound::FMusicTransportEventStream>(METASOUND_GET_PARAM_NAME(AIGen::Inputs::Transport), Settings);
 			HarmonixMetasound::FMidiClockReadRef InMidiClock = InputData.GetOrConstructDataReadReference<HarmonixMetasound::FMidiClock>(METASOUND_GET_PARAM_NAME(AIGen::Inputs::Clock), Settings);
-			return MakeUnique<FAIGenOperator>(InParams, InMidiClock, InTransport);
+			Metasound::FMIDIGeneratorZZZReadRef InGenerator = InputData.GetOrConstructDataReadReference<Metasound::FMIDIGeneratorZZZ>("Generator");
+			return MakeUnique<FAIGenOperator>(InParams, InMidiClock, InTransport, InGenerator);
 		}
 
 
@@ -383,10 +346,12 @@ namespace Metasound
 		FMidiVoiceGeneratorBase VoiceGenerator{};
 		void Execute()
 		{
+			TryUpdateGenThreadInput();
+
 			int32 currentTick = Outputs.MidiClock->GetCurrentHiResTick();
 			int32 lastTick = MidiFileData->Tracks[0].GetEvents().Last().GetTick();
 
-			if (bShouldUpdateTokens)
+			if (GenThread.IsValid() && bShouldUpdateTokens)
 			{
 				TokenModifSection.Lock();
 				UpdateScheduledMidiEvents();
@@ -395,7 +360,7 @@ namespace Metasound
 			}
 
 			// Block until music is generated
-			while (currentTick > lastTick)
+			while (GenThread.IsValid() && currentTick > lastTick)
 			{
 				if (bShouldUpdateTokens)
 				{
@@ -534,15 +499,14 @@ namespace Metasound
 		FMidiFileProxyPtr MidiDataProxy;
 		TSharedPtr<FMidiFileData> MidiFileData;
 
-		bool bIsThreaded = true;
-		TWeakObjectPtr<UMIDIGenerator> Generator = nullptr;
 		TArray<int32> NewEncodedTokens;
 		TArray<int32> DecodedTokens;
 
 		FSampleCount BlockSize = 0;
 		int32 PrerollBars = 8;
 		int32 UnplayedTokenIndex = 0;
-		FGenThread GenThread;
+		//FGenThread GenThread;
+		TSharedPtr<FGenThread> GenThread;
 
 		TOptional<HarmonixMetasound::FMidiStreamEvent> LastNoteOn;
 		bool Enabled{ true };

@@ -63,8 +63,10 @@ void FGenThread::TryInsertTokenGroup()
 
 uint32 FGenThread::Run() 
 {
+	if (!forceReupdate)
 	{
 		TArray<int32> Context;
+		//LineNbMaxToken = 512;
 		int32 start = FMath::Max(0, EncodedLine.Num() - LineNbMaxToken);
 		for (int32 i = start; i < EncodedLine.Num(); i++)
 		{
@@ -72,16 +74,95 @@ uint32 FGenThread::Run()
 		}
 
 		batch_set(batch, Context.GetData(), Context.Num(), start);
+
+		runInstance_setMaxInputLength(runInstance, LineNbMaxToken);
 	}
 
 	while (!bShutdown) 
 	{
-		/* Work on a dedicated thread */
-		//Generator->Generate(10, Tokens);
+		SCOPE_CYCLE_COUNTER(STAT_GenThread);
+
+		if (forceReupdate)
+		{
+			runInstance_reset(runInstance);
+
+			{
+				TArray<int32> Context;
+				int32 start = FMath::Max(0, EncodedLine.Num() - LineNbMaxToken);
+				for (int32 i = start; i < EncodedLine.Num(); i++)
+				{
+					Context.Add(EncodedLine[i]);
+				}
+
+				batch_set(batch, Context.GetData(), Context.Num(), start);
+			}
+		}
+
+		//generator_generateNextToken(Generator.generator, runInstance);
+
+		generator_preGenerate(Generator.generator, runInstance);
+		generator_generate(Generator.generator, runInstance);
+
+		const float* tensor = runInstance_getPastTensor(runInstance, 0);
+		const float* presTensor = runInstance_getPresentTensor(runInstance, 0);
+
+		int64 nbPastValues = FMath::Min(LineNbMaxToken, EncodedLine.Num());
+
+		auto getValue = [](int64 indices[], int64 dims[])
+			{
+				return indices[4] + indices[3] * dims[4]
+					+ indices[2] * dims[3] * dims[4] + indices[1] * dims[2] * dims[3] * dims[4]
+					+ indices[0] * dims[1] * dims[2] * dims[3] * dims[4];
+			};
+
+		if (nbPastValues > 3)
+		{
+			if (tensor != nullptr)
+			{
+				int64 dims[5] = { 2, 1, 4, nbPastValues, 64 };
+
+				int x = 0;
+				int batch2 = 0;
+				int head = 0;
+				int v = 3;
+				int embd = 0;
+
+				int64 in1[5] = { 0,0,0,3,0 };
+				int id = getValue(in1, dims);
+				int64 in2[5] = { 0,0,0,2,0 };
+				int id2 = getValue(in2, dims);
+				int64 in3[5] = { 0,0,0,1,0 };
+				int id3 = getValue(in3, dims);
+
+				float f = tensor[id];
+				float f2 = tensor[id2];
+				float f3 = tensor[id3];
 
 
+				float vxx = f;
+			}
 
-		generator_generateNextToken(Generator.generator, runInstance);
+			if (presTensor != nullptr)
+			{
+				int64 dims[5] = { 2, 1, 4, nbPastValues, 64 };
+
+				int64 in1[5] = { 0,0,0,3,0 };
+				int id = getValue(in1, dims);
+				int64 in2[5] = { 0,0,0,2,0 };
+				int id2 = getValue(in2, dims);
+				int64 in3[5] = { 0,0,0,1,0 };
+				int id3 = getValue(in3, dims);
+
+				float f = presTensor[id];
+				float f2 = presTensor[id2];
+				float f3 = presTensor[id3];
+
+
+				float vxx = f;
+			}
+		}
+
+		generator_postGenerate(Generator.generator, runInstance);
 
 		//int32* tokens;
 		//int32 tokensSize;
@@ -94,10 +175,6 @@ uint32 FGenThread::Run()
 
 
 		TryInsertTokenGroup();
-
-
-
-
 
 
 		//Context.Add(newToken);
@@ -133,3 +210,8 @@ void FGenThread::Stop()
 {
 	bShutdown = true;
 }
+
+//TSharedPtr<Audio::IProxyData> FGenThread::CreateProxyData(const Audio::FProxyDataInitParams& InitParams)
+//{
+//	return MakeShared<FMIDIGeneratorProxy, ESPMode::ThreadSafe>(this);
+//}

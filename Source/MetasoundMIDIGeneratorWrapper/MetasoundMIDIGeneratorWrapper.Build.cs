@@ -37,6 +37,7 @@ public class MetasoundMIDIGeneratorWrapper : ModuleRules
                 "HarmonixMetasound",
                 "HarmonixDsp",
                 "HarmonixMidi",
+                "Harmonix",
                 "Serialization",
 				"MIDIGeneratorWrapper",
 				// ... add other public dependencies that you statically link with here ...

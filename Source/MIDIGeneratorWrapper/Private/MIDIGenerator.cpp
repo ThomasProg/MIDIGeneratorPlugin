@@ -154,3 +154,4 @@ void UMIDIGenerator::OnPitch_Implementation(int32 pitch)
 //
 //	UObject::BeginDestroy();
 //}
+

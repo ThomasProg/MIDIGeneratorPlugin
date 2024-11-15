@@ -7,14 +7,13 @@
 #include "gen.h"
 #include "MIDIGenerator.generated.h"
 
-
 struct MIDIGENERATORWRAPPER_API FMIDIGenerator
 {
 	EnvHandle env;
 	MidiTokenizerHandle tok;
 	MusicGeneratorHandle generator;
 
-	void Init(const FString& tokenizerPath = "C:/Users/thoma/Documents/Unreal Projects/MIDITokCpp/tokenizer.json", const FString& modelPath = "C:/Users/thoma/Documents/Unreal Projects/MIDITokCpp/onnx_model_path/gpt2-midi-model3_past.onnx");
+	void Init(const FString& tokenizerPath, const FString& modelPath);
 
 	void Deinit();
 
@@ -27,7 +26,7 @@ struct MIDIGENERATORWRAPPER_API FMIDIGenerator
  * 
  */
 UCLASS(Blueprintable, BlueprintType)
-class MIDIGENERATORWRAPPER_API UMIDIGenerator : public UObject
+class MIDIGENERATORWRAPPER_API UMIDIGenerator : public UObject, public IAudioProxyDataFactory
 {
 	GENERATED_BODY()
 

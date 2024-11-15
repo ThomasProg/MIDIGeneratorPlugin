@@ -35,7 +35,7 @@ public class MIDIGeneratorWrapper : ModuleRules
 				"HarmonixMidi",
 				"Harmonix",
 				// ... add other public dependencies that you statically link with here ...
-			}
+            }
 			);
 			
 		
@@ -45,8 +45,8 @@ public class MIDIGeneratorWrapper : ModuleRules
 				// ... add private dependencies that you statically link with here ...	
 					"AudioExtensions",
 					"AudioMixer",
-					"SignalProcessing"
-			}
+					"SignalProcessing",
+            }
 			);
 		
 		
