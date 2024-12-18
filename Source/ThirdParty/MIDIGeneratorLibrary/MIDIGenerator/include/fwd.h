@@ -30,6 +30,7 @@ class TokSequence;
 using TokenSequence = TokSequence;
 class MIDIConverter;
 struct Batch;
+struct SearchArgs;
 
 using EnvHandle = Ort::Env*;
 using MidiTokenizerHandle = MidiTokenizer*;
@@ -41,3 +42,5 @@ using MidiConverterHandle = MIDIConverter*;
 using BatchHandle = Batch*;
 
 using DataType = std::int32_t;
+
+using TSearchStrategy = void (*)(const struct SearchArgs& args, void* searchStrategyData);

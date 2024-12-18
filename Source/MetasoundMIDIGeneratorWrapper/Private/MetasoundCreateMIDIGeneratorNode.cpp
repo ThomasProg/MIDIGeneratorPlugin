@@ -165,7 +165,7 @@ public:
 						}
 					};
 
-				MIDIGenerator->Start(GetPath(*Inputs.TokenizerPath), GetPath(*Inputs.ModelPath), Inputs.StartTokens);
+				MIDIGenerator->PreStart(GetPath(*Inputs.TokenizerPath), GetPath(*Inputs.ModelPath), Inputs.StartTokens);
 			}
 			const FMIDIGeneratorZZZ& Inst = *Outputs.Generator;
 			FMIDIGeneratorProxyPtr Proxy = Inst.GetProxy();

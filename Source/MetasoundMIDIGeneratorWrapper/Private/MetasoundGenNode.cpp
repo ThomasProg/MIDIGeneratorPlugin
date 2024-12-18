@@ -109,11 +109,11 @@ namespace Metasound
 					TokenModifSection.Unlock();
 				}
 
-
 				GenThread = Inputs.Generator->GetProxy()->MidiGenerator;
 
 				if (GenThread != nullptr)
 				{
+					TokenModifSection.Lock();
 					GenThread->OnGenerated.BindLambda([this](int32 NewToken)
 						{
 							TokenModifSection.Lock();
@@ -121,6 +121,12 @@ namespace Metasound
 							NewEncodedTokens.Add(NewToken);
 							TokenModifSection.Unlock();
 						});
+					TokenModifSection.Unlock();
+
+					if (!GenThread->HasStarted())
+					{
+						GenThread->Start();
+					}
 
 					TokenModifSection.Lock();
 					NewEncodedTokens = GenThread->EncodedLine;
@@ -166,9 +172,6 @@ namespace Metasound
 			converterSetOnNote(converter, [](void* data, const Note& newNote)
 				{
 					Args& args = *(Args*)(data);
-					//args.unplayedTokenIndex = args.i + 1;
-
-					//args.self->Cursor.pconverter
 
 					int32 Channel = 1;
 					int32 NoteNumber = newNote.pitch;
@@ -178,7 +181,6 @@ namespace Metasound
 
 					int32 CurrentTick = args.self->Outputs.MidiClock->GetCurrentHiResTick();
 
-					//int32 Tick = newNote.tick*180;
 					int32 Tick = newNote.tick * 100 + args.self->AddedTicks;
 
 					if (Tick < CurrentTick)
@@ -351,6 +353,17 @@ namespace Metasound
 			int32 currentTick = Outputs.MidiClock->GetCurrentHiResTick();
 			int32 lastTick = MidiFileData->Tracks[0].GetEvents().Last().GetTick();
 
+			// profiling
+#if !UE_BUILD_SHIPPING
+			const TArray<FMidiEvent>& eventList = MidiFileData->Tracks[0].GetEvents();
+			int32 UnplayedTokenIndex = 0;
+			while (UnplayedTokenIndex < eventList.Num() && eventList[UnplayedTokenIndex].GetTick() < currentTick)
+			{
+				UnplayedTokenIndex++;
+			}
+#endif
+
+
 			if (GenThread.IsValid() && bShouldUpdateTokens)
 			{
 				TokenModifSection.Lock();
@@ -504,7 +517,6 @@ namespace Metasound
 
 		FSampleCount BlockSize = 0;
 		int32 PrerollBars = 8;
-		int32 UnplayedTokenIndex = 0;
 		//FGenThread GenThread;
 		TSharedPtr<FGenThread> GenThread;
 

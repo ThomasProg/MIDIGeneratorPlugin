@@ -31,6 +31,12 @@ extern "C"
     API_EXPORT void generator_setConfig(MusicGeneratorHandle generator, int64_t num_attention_heads, int64_t hidden_size, int64_t num_layer);
 
     API_EXPORT RunInstance* generator_createRunInstance(MusicGeneratorHandle generator); 
+
+
+    // static
+    API_EXPORT void generator_getNextTokens_greedyFiltered(const SearchArgs& args, bool (*filter)(std::int32_t token, void* data), void* data);
+    API_EXPORT void generator_getNextTokens_greedyPreFiltered(const SearchArgs& args, std::int32_t* availableTokens, std::int32_t nbAvailableToken);
+    API_EXPORT void generator_getNextTokens_greedy(const SearchArgs& args);
 }
 
 // Redirector
@@ -50,6 +56,9 @@ extern "C"
 
     API_EXPORT void tokenizer_decodeIDs(MidiTokenizerHandle tokenizer, const std::int32_t* inputIDs, std::int32_t size, std::int32_t** outputIDs, std::int32_t* outSize);
     API_EXPORT void tokenizer_decodeIDs_free(std::int32_t* outputIDs);
+
+    // outDecodedTokens stays valid until the next call to this function
+    API_EXPORT void tokenizer_decodeToken(MidiTokenizerHandle tokenizer, std::int32_t encodedToken, std::int32_t** outDecodedTokens, std::int32_t* outNbDecodedTokens);
 }
 
 
@@ -86,6 +95,9 @@ extern "C"
 
     API_EXPORT void runInstance_getPresentTensorShape(RunInstanceHandle runInstance, MusicGeneratorHandle generator, std::int64_t* outShape);
     API_EXPORT void runInstance_getPastTensorShape(RunInstanceHandle runInstance, MusicGeneratorHandle generator, std::int64_t* outShape);
+
+    API_EXPORT void runInstance_setSearchStrategyData(RunInstanceHandle runInstance, void* searchStrategyData);
+    API_EXPORT void runInstance_setSearchStrategy(RunInstanceHandle runInstance, TSearchStrategy searchStrategy);
 }
 
 // Tokenizer

@@ -42,7 +42,11 @@ class MIDIGENERATORWRAPPER_API FGenThread : public FRunnable//, public IAudioPro
 {
 public:
 	//FGenThread(const FString& TokenizerPath, const FString& ModelPath);
+	void PreStart(const FString& TokenizerPath, const FString& ModelPath, const TArray<int32>& InTokens);
 	void Start(const FString& TokenizerPath, const FString& ModelPath, const TArray<int32>& InTokens);
+	void Start();
+	bool HasStarted() const;
+
 	~FGenThread();
 
 
@@ -54,7 +58,8 @@ public:
 	BatchHandle batch;
 
 	TArray<int32> EncodedLine;
-	int32 LineNbMaxToken = 256;
+	//int32 LineNbMaxToken = 256;
+	int32 LineNbMaxToken = 511;
 	int32 NbMaxTokensAhead = 50;
 
 	int32 NbBatchGen = 10;
