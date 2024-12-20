@@ -321,7 +321,9 @@ uint32 FGenThread::Run()
 		//generator_generateNextToken(Generator.generator, runInstance);
 
 		generator_preGenerate(Generator.generator, runInstance);
-		generator_generate(Generator.generator, runInstance);
+		const char* errorMsg;
+		bool success = generator_generate(Generator.generator, runInstance, &errorMsg);
+		verify(success);
 
 		//const float* tensor = runInstance_getPastTensor(runInstance, 0);
 		//const float* presTensor = runInstance_getPresentTensor(runInstance, 0);

@@ -25,7 +25,7 @@ extern "C"
     API_EXPORT void generator_generateNextToken(MusicGeneratorHandle generator, RunInstanceHandle runInstance);
 
     API_EXPORT void generator_preGenerate(MusicGeneratorHandle generator, RunInstanceHandle runInstance);
-    API_EXPORT void generator_generate(MusicGeneratorHandle generator, RunInstanceHandle runInstance);
+    API_EXPORT bool generator_generate(MusicGeneratorHandle generator, RunInstanceHandle runInstance, const char** outError);
     API_EXPORT void generator_postGenerate(MusicGeneratorHandle generator, RunInstanceHandle runInstance);
 
     API_EXPORT void generator_setConfig(MusicGeneratorHandle generator, int64_t num_attention_heads, int64_t hidden_size, int64_t num_layer);
