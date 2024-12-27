@@ -9,30 +9,30 @@ DECLARE_CYCLE_STAT(TEXT("GenThread"), STAT_GenThread, STATGROUP_Game);
 
 DECLARE_DELEGATE_OneParam(FOnGenerated, int32);
 
-class FGenThread;
-class FMIDIGeneratorProxy;
-using FMIDIGeneratorProxyPtr = TSharedPtr<FMIDIGeneratorProxy, ESPMode::ThreadSafe>;
-
-class FMIDIGeneratorProxy final : public Audio::TProxyData<FMIDIGeneratorProxy>
-{
-public:
-	IMPL_AUDIOPROXY_CLASS(FMIDIGeneratorProxy);
-
-	explicit FMIDIGeneratorProxy(const TSharedPtr<FGenThread>& Data)
-		: MidiGenerator(Data)
-	{}
-
-	//explicit FMIDIGeneratorProxy(FGenThread* Data)
-	//	: MidiGenerator(Data)
-	//{}
-
-	TSharedPtr<FGenThread> GetMidiFile()
-	{
-		return MidiGenerator;
-	}
-
-	TSharedPtr<FGenThread> MidiGenerator;
-};
+//class FGenThread;
+//class FMIDIGeneratorProxy;
+//using FMIDIGeneratorProxyPtr = TSharedPtr<FMIDIGeneratorProxy, ESPMode::ThreadSafe>;
+//
+//class FMIDIGeneratorProxy final : public Audio::TProxyData<FMIDIGeneratorProxy>
+//{
+//public:
+//	IMPL_AUDIOPROXY_CLASS(FMIDIGeneratorProxy);
+//
+//	explicit FMIDIGeneratorProxy(const TSharedPtr<FGenThread>& Data)
+//		: MidiGenerator(Data)
+//	{}
+//
+//	//explicit FMIDIGeneratorProxy(FGenThread* Data)
+//	//	: MidiGenerator(Data)
+//	//{}
+//
+//	TSharedPtr<FGenThread> GetMidiFile()
+//	{
+//		return MidiGenerator;
+//	}
+//
+//	TSharedPtr<FGenThread> MidiGenerator;
+//};
 
 
 /**

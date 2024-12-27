@@ -47,165 +47,165 @@ bool FGenThread::Init()
 	runInstance_addBatch(runInstance, batch);
 	batch_set(batch, EncodedLine.GetData(), EncodedLine.Num(), 0);
 
-	runInstance_setSearchStrategyData(runInstance, this);
+	//runInstance_setSearchStrategyData(runInstance, this);
 
-	runInstance_setSearchStrategy(runInstance, [](const SearchArgs& args, void* searchStrategyData)
-		{
-			FGenThread& genThread = *(FGenThread*)searchStrategyData;
+	//runInstance_setSearchStrategy(runInstance, [](const SearchArgs& args, void* searchStrategyData)
+	//	{
+	//		FGenThread& genThread = *(FGenThread*)searchStrategyData;
 
-			// pitch / velocity / duration
+	//		// pitch / velocity / duration
 
-			bool hasPitch = false;
-			bool hasVelocity = false;
-			bool hasDuration = false;
+	//		bool hasPitch = false;
+	//		bool hasVelocity = false;
+	//		bool hasDuration = false;
 
-			if (hasPitch && hasVelocity && hasDuration)
-			{
-				hasPitch = false;
-				hasVelocity = false;
-				hasDuration = false;
-			}
+	//		if (hasPitch && hasVelocity && hasDuration)
+	//		{
+	//			hasPitch = false;
+	//			hasVelocity = false;
+	//			hasDuration = false;
+	//		}
 
-			auto filter = [](std::int32_t token, void* data) -> bool
-			{
-				FGenThread& genThread = *(FGenThread*)data;
+	//		auto filter = [](std::int32_t token, void* data) -> bool
+	//		{
+	//			FGenThread& genThread = *(FGenThread*)data;
 
-				std::int32_t* decodedTokens;
-				std::int32_t nbDecodedTokens;
-				// @TODO : thread safe
-				tokenizer_decodeToken(genThread.Generator.tok, token, &decodedTokens, &nbDecodedTokens);
+	//			std::int32_t* decodedTokens;
+	//			std::int32_t nbDecodedTokens;
+	//			// @TODO : thread safe
+	//			tokenizer_decodeToken(genThread.Generator.tok, token, &decodedTokens, &nbDecodedTokens);
 
-				for (std::int32_t i = 0; i < nbDecodedTokens; i++)
-				{
-					std::int32_t decodedToken = decodedTokens[i];
-					if (isPitch(genThread.Generator.tok, decodedToken))
-					{
-						std::int32_t pitch = getPitch(genThread.Generator.tok, decodedToken);
-						if (pitch > 80)
-						{
-							return false;
-						}
-					}
-				}
+	//			for (std::int32_t i = 0; i < nbDecodedTokens; i++)
+	//			{
+	//				std::int32_t decodedToken = decodedTokens[i];
+	//				if (isPitch(genThread.Generator.tok, decodedToken))
+	//				{
+	//					std::int32_t pitch = getPitch(genThread.Generator.tok, decodedToken);
+	//					if (pitch > 80)
+	//					{
+	//						return false;
+	//					}
+	//				}
+	//			}
 
-				return true;
+	//			return true;
 
-				//bool isIgnored = false;
-				//isIgnored = isIgnored || (genThread.hasPitch && isPitch(genThread.Generator.tok, token));
-				//isIgnored = isIgnored || (genThread.hasVelocity && isVelocity(genThread.Generator.tok, token));
-				//isIgnored = isIgnored || (genThread.hasDuration && isDuration(genThread.Generator.tok, token));
+	//			//bool isIgnored = false;
+	//			//isIgnored = isIgnored || (genThread.hasPitch && isPitch(genThread.Generator.tok, token));
+	//			//isIgnored = isIgnored || (genThread.hasVelocity && isVelocity(genThread.Generator.tok, token));
+	//			//isIgnored = isIgnored || (genThread.hasDuration && isDuration(genThread.Generator.tok, token));
 
-				//if (isIgnored)
-				//{
-				//	return false;
-				//}
-
-
-			};
-
-			//MusicGenerator::getNextTokens_greedyFiltered(args, availableTokens->GetData(), availableTokens->Num());
-			//generator_getNextTokens_greedyFiltered(args, filter, searchStrategyData);
+	//			//if (isIgnored)
+	//			//{
+	//			//	return false;
+	//			//}
 
 
+	//		};
 
-			// Get the last token's logits for each sequence in the batch
-			for (std::int32_t b = 0; b < args.nbBatches; ++b)
-			{
-				// Pointer to the logits for the last token
-				const float* last_logits = args.logitsTensor + (b * args.nbSequences + (args.nbSequences - 1)) * args.vocabSize;
-
-				// Find the index with the maximum logit
-				float max_logit = last_logits[0];
-				float max_logit2 = last_logits[0];
-				std::int32_t max_index = 0;
-				std::int32_t max_index2 = 0;
-				for (std::int32_t token = 1; token < args.vocabSize; token++)
-				{
-					float added = 0.0;
-
-					std::int32_t* decodedTokens = nullptr;
-					std::int32_t nbDecodedTokens = 0;
-					// @TODO : thread safe
-					tokenizer_decodeToken(genThread.Generator.tok, token, &decodedTokens, &nbDecodedTokens);
-
-					for (std::int32_t i = 0; i < nbDecodedTokens; i++)
-					{
-						std::int32_t decodedToken = decodedTokens[i];
-						if (isPitch(genThread.Generator.tok, decodedToken))
-						{
-							std::int32_t pitch = getPitch(genThread.Generator.tok, decodedToken);
-							if (pitch > 80)
-							{
-								//added -= 0.5;
-								break;
-							}
-						}
-					}
-
-					if (decodedTokens != nullptr)
-						tokenizer_decodeIDs_free(decodedTokens);
-
-					if (last_logits[token] + added > max_logit)
-					{
-						max_logit2 = max_logit;
-						max_logit = last_logits[token] + added;
-						max_index2 = max_index;
-						max_index = token;
-					}
-				}
-
-
-				auto hasPitchX = [&](int32 token) -> bool
-				{
-					std::int32_t* decodedTokens = nullptr;
-					std::int32_t nbDecodedTokens = 0;
-					// @TODO : thread safe
-					tokenizer_decodeToken(genThread.Generator.tok, token, &decodedTokens, &nbDecodedTokens);
-
-					for (std::int32_t i = 0; i < nbDecodedTokens; i++)
-					{
-						std::int32_t decodedToken = decodedTokens[i];
-
-						if (isBarNone(genThread.Generator.tok, decodedToken))
-						{
-							tokenizer_decodeIDs_free(decodedTokens);
-							return false;
-						}
-
-						if (isPosition(genThread.Generator.tok, decodedToken))
-						{
-							tokenizer_decodeIDs_free(decodedTokens);
-							return false;
-						}
-
-
-						if (i == 0 && isPitch(genThread.Generator.tok, decodedToken))
-						{
-							tokenizer_decodeIDs_free(decodedTokens);
-							return true;
-							//std::int32_t pitch = getPitch(genThread.Generator.tok, decodedToken);
-							//if (pitch > 80)
-							//{
-							//	//added -= 0.5;
-							//	break;
-							//}
-						}
-					}
-
-					if (decodedTokens != nullptr)
-						tokenizer_decodeIDs_free(decodedTokens);
-					
-					return false;
-				};
+	//		//MusicGenerator::getNextTokens_greedyFiltered(args, availableTokens->GetData(), availableTokens->Num());
+	//		//generator_getNextTokens_greedyFiltered(args, filter, searchStrategyData);
 
 
 
-				if (hasPitchX(max_index) && hasPitchX(max_index2) && max_logit - max_logit2 < 0.5/*&& FMath::RandRange(0.0, 1.0) < 0.1*/)
-					args.outNextTokens[b] = max_index2;
-				else 
-					args.outNextTokens[b] = max_index;
-			}
-		});
+	//		// Get the last token's logits for each sequence in the batch
+	//		for (std::int32_t b = 0; b < args.nbBatches; ++b)
+	//		{
+	//			// Pointer to the logits for the last token
+	//			const float* last_logits = args.logitsTensor + (b * args.nbSequences + (args.nbSequences - 1)) * args.vocabSize;
+
+	//			// Find the index with the maximum logit
+	//			float max_logit = last_logits[0];
+	//			float max_logit2 = last_logits[0];
+	//			std::int32_t max_index = 0;
+	//			std::int32_t max_index2 = 0;
+	//			for (std::int32_t token = 1; token < args.vocabSize; token++)
+	//			{
+	//				float added = 0.0;
+
+	//				std::int32_t* decodedTokens = nullptr;
+	//				std::int32_t nbDecodedTokens = 0;
+	//				// @TODO : thread safe
+	//				tokenizer_decodeToken(genThread.Generator.tok, token, &decodedTokens, &nbDecodedTokens);
+
+	//				for (std::int32_t i = 0; i < nbDecodedTokens; i++)
+	//				{
+	//					std::int32_t decodedToken = decodedTokens[i];
+	//					if (isPitch(genThread.Generator.tok, decodedToken))
+	//					{
+	//						std::int32_t pitch = getPitch(genThread.Generator.tok, decodedToken);
+	//						if (pitch > 80)
+	//						{
+	//							//added -= 0.5;
+	//							break;
+	//						}
+	//					}
+	//				}
+
+	//				if (decodedTokens != nullptr)
+	//					tokenizer_decodeIDs_free(decodedTokens);
+
+	//				if (last_logits[token] + added > max_logit)
+	//				{
+	//					max_logit2 = max_logit;
+	//					max_logit = last_logits[token] + added;
+	//					max_index2 = max_index;
+	//					max_index = token;
+	//				}
+	//			}
+
+
+	//			auto hasPitchX = [&](int32 token) -> bool
+	//			{
+	//				std::int32_t* decodedTokens = nullptr;
+	//				std::int32_t nbDecodedTokens = 0;
+	//				// @TODO : thread safe
+	//				tokenizer_decodeToken(genThread.Generator.tok, token, &decodedTokens, &nbDecodedTokens);
+
+	//				for (std::int32_t i = 0; i < nbDecodedTokens; i++)
+	//				{
+	//					std::int32_t decodedToken = decodedTokens[i];
+
+	//					if (isBarNone(genThread.Generator.tok, decodedToken))
+	//					{
+	//						tokenizer_decodeIDs_free(decodedTokens);
+	//						return false;
+	//					}
+
+	//					if (isPosition(genThread.Generator.tok, decodedToken))
+	//					{
+	//						tokenizer_decodeIDs_free(decodedTokens);
+	//						return false;
+	//					}
+
+
+	//					if (i == 0 && isPitch(genThread.Generator.tok, decodedToken))
+	//					{
+	//						tokenizer_decodeIDs_free(decodedTokens);
+	//						return true;
+	//						//std::int32_t pitch = getPitch(genThread.Generator.tok, decodedToken);
+	//						//if (pitch > 80)
+	//						//{
+	//						//	//added -= 0.5;
+	//						//	break;
+	//						//}
+	//					}
+	//				}
+
+	//				if (decodedTokens != nullptr)
+	//					tokenizer_decodeIDs_free(decodedTokens);
+	//				
+	//				return false;
+	//			};
+
+
+
+	//			if (hasPitchX(max_index) && hasPitchX(max_index2) && max_logit - max_logit2 < 0.5/*&& FMath::RandRange(0.0, 1.0) < 0.1*/)
+	//				args.outNextTokens[b] = max_index2;
+	//			else 
+	//				args.outNextTokens[b] = max_index;
+	//		}
+	//	});
 
 
 	//runInstance_setSearchStrategy(runInstance, [](const SearchArgs& args, void* searchStrategyData)
@@ -318,99 +318,18 @@ uint32 FGenThread::Run()
 			}
 		}
 
-		//generator_generateNextToken(Generator.generator, runInstance);
-
 		generator_preGenerate(Generator.generator, runInstance);
 		const char* errorMsg;
 		bool success = generator_generate(Generator.generator, runInstance, &errorMsg);
 		verify(success);
 
-		//const float* tensor = runInstance_getPastTensor(runInstance, 0);
-		//const float* presTensor = runInstance_getPresentTensor(runInstance, 0);
-
-		//int64 nbPastValues = FMath::Min(LineNbMaxToken, EncodedLine.Num());
-
-		//auto getValue = [](int64 indices[], int64 dims[])
-		//	{
-		//		return indices[4] + indices[3] * dims[4]
-		//			+ indices[2] * dims[3] * dims[4] + indices[1] * dims[2] * dims[3] * dims[4]
-		//			+ indices[0] * dims[1] * dims[2] * dims[3] * dims[4];
-		//	};
-
-		//if (nbPastValues > 3)
-		//{
-		//	if (tensor != nullptr)
-		//	{
-		//		int64 dims[5] = { 2, 1, 4, nbPastValues, 64 };
-
-		//		int x = 0;
-		//		int batch2 = 0;
-		//		int head = 0;
-		//		int v = 3;
-		//		int embd = 0;
-
-		//		int64 in1[5] = { 0,0,0,3,0 };
-		//		int id = getValue(in1, dims);
-		//		int64 in2[5] = { 0,0,0,2,0 };
-		//		int id2 = getValue(in2, dims);
-		//		int64 in3[5] = { 0,0,0,1,0 };
-		//		int id3 = getValue(in3, dims);
-
-		//		float f = tensor[id];
-		//		float f2 = tensor[id2];
-		//		float f3 = tensor[id3];
-
-
-		//		float vxx = f;
-		//	}
-
-		//	if (presTensor != nullptr)
-		//	{
-		//		int64 dims[5] = { 2, 1, 4, nbPastValues, 64 };
-
-		//		int64 in1[5] = { 0,0,0,3,0 };
-		//		int id = getValue(in1, dims);
-		//		int64 in2[5] = { 0,0,0,2,0 };
-		//		int id2 = getValue(in2, dims);
-		//		int64 in3[5] = { 0,0,0,1,0 };
-		//		int id3 = getValue(in3, dims);
-
-		//		float f = presTensor[id];
-		//		float f2 = presTensor[id2];
-		//		float f3 = presTensor[id3];
-
-
-		//		float vxx = f;
-		//	}
-		//}
-
 		generator_postGenerate(Generator.generator, runInstance);
 
-		//int32* tokens;
-		//int32 tokensSize;
-		//batch_getEncodedTokens(batch, &tokens, &tokensSize);
-
-		//int32 newToken = generateNextToken(Context);
-		//int32 newToken = tokens[tokensSize - 1];
 		int32 newToken = batch_getLastGeneratedToken(batch);
 		EncodedLine.Add(newToken);
 
 
 		TryInsertTokenGroup();
-
-
-		//Context.Add(newToken);
-
-		//if (Context.Num() > LineNbMaxToken)
-		//{
-		//	Context.RemoveAt(0, EAllowShrinking::No);
-		//}
-
-		//// while generated ahead enough
-		//while (EncodedLine.Num() - NextTokenIndexToPlay > NbMaxTokensAhead)
-		//{
-		//	FPlatformProcess::Sleep(0.1f);
-		//}
 
 		if (!bShutdown)
 			OnGenerated.ExecuteIfBound(newToken);

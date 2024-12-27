@@ -16,6 +16,7 @@
 #include "Engine/Engine.h"
 #include "MIDIGenerator.h"
 #include "MetasoundMIDIGenerator.h"
+#include "MIDIGeneratorEnv.h"
 
 #include "MetasoundExecutableOperator.h"     // TExecutableOperator class
 #include "MetasoundPrimitives.h"             // ReadRef and WriteRef descriptions for bool, int32, float, and string
@@ -150,7 +151,7 @@ public:
 		{
 			if (!MIDIGenerator.IsValid())
 			{
-				MIDIGenerator = MakeShared<FGenThread>();
+				MIDIGenerator = MakeShared<FMIDIGeneratorEnv>();
 
 				auto GetPath = [](const FString& BaseStr) -> FString
 					{
@@ -183,7 +184,8 @@ public:
 		FInputs Inputs;
 		FOutputs Outputs;
 
-		TSharedPtr<FGenThread> MIDIGenerator;
+		//TSharedPtr<FGenThread> MIDIGenerator;
+		TSharedPtr<FMIDIGeneratorEnv> MIDIGenerator;
 	};
 
 	// Node Class - Inheriting from FNodeFacade is recommended for nodes that have a static FVertexInterface

@@ -7,7 +7,6 @@
 #include "MetasoundDataReference.h"
 #include "MetasoundDataTypeRegistrationMacro.h"
 #include "IAudioProxyInitializer.h"
-#include "GenThread.h"
 
 class FMIDIGeneratorProxy;
 using FMIDIGeneratorProxyPtr = TSharedPtr<FMIDIGeneratorProxy, ESPMode::ThreadSafe>;
