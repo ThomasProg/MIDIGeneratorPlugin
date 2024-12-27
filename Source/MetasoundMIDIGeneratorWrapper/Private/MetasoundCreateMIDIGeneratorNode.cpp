@@ -1,4 +1,4 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
+// Copyright Epic Ga// Copyright Prog'z. All Rights Reserved.
 
 #include "HarmonixMetasound/DataTypes/MidiStream.h"
 #include "Interfaces/MetasoundFrontendSourceInterface.h"
