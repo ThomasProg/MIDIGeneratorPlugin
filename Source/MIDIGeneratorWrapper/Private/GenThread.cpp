@@ -5,8 +5,21 @@
 
 void FGenThread::PreStart(const FString& InTokenizerPath, const FString& InModelPath, const TArray<int32>& InTokens)
 {
-	this->TokenizerPath = InTokenizerPath;
-	this->ModelPath = InModelPath;
+	auto GetPath = [](const FString& BaseStr) -> FString
+		{
+			if (BaseStr.Contains(":"))
+			{
+				return BaseStr;
+			}
+			else
+			{
+				FString FullPath = IFileManager::Get().ConvertToAbsolutePathForExternalAppForRead(*FPaths::ProjectContentDir());
+				return FullPath + BaseStr;
+			}
+		};
+
+	this->TokenizerPath = GetPath(*InTokenizerPath);
+	this->ModelPath = GetPath(*InModelPath);
 	this->EncodedLine = InTokens;
 }
 

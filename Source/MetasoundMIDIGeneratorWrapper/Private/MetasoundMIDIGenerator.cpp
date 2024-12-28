@@ -1,8 +1,10 @@
 // Copyright Prog'z. All Rights Reserved.
 
 #include "MetasoundMIDIGenerator.h"
+#include "MIDIGeneratorEnv.h"
 
-REGISTER_METASOUND_DATATYPE(Metasound::FMIDIGeneratorZZZ, "MIDIGenerator");
+REGISTER_METASOUND_DATATYPE(Metasound::FMIDIGeneratorZZZ, "MIDIGenerator", Metasound::ELiteralType::UObjectProxy, UMIDIGeneratorEnv);
+//REGISTER_METASOUND_DATATYPE(Metasound::FMIDIGeneratorZZZ, "MIDIGenerator");
 
 namespace Metasound
 {

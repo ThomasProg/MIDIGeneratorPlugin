@@ -153,20 +153,7 @@ public:
 			{
 				MIDIGenerator = MakeShared<FMIDIGeneratorEnv>();
 
-				auto GetPath = [](const FString& BaseStr) -> FString
-					{
-						if (BaseStr.Contains(":"))
-						{
-							return BaseStr;
-						}
-						else
-						{
-							FString FullPath = IFileManager::Get().ConvertToAbsolutePathForExternalAppForRead(*FPaths::ProjectContentDir());
-							return FullPath + BaseStr;
-						}
-					};
-
-				MIDIGenerator->PreStart(GetPath(*Inputs.TokenizerPath), GetPath(*Inputs.ModelPath), Inputs.StartTokens);
+				MIDIGenerator->PreStart(*Inputs.TokenizerPath, *Inputs.ModelPath, Inputs.StartTokens);
 			}
 			const FMIDIGeneratorZZZ& Inst = *Outputs.Generator;
 			FMIDIGeneratorProxyPtr Proxy = Inst.GetProxy();

@@ -68,8 +68,11 @@ namespace Metasound
 			, Outputs{ HarmonixMetasound::FMidiStreamWriteRef::CreateNew(), HarmonixMetasound::FMidiClockWriteRef::CreateNew(InParams.OperatorSettings) }
 			, BlockSize(InParams.OperatorSettings.GetNumFramesPerBlock())
 		{
-			FMIDIGeneratorEnv& gen = *Inputs.Generator->GetProxy()->MidiGenerator;
+			TryUpdateGenThreadInput();
+		}
 
+		void OnGenEnvSet(FMIDIGeneratorEnv& gen)
+		{
 			int32 CurrentTempo = 120;
 			int32 CurrentTimeSigNum = 4;
 			int32 CurrentTimeSigDenom = 4;
@@ -82,6 +85,8 @@ namespace Metasound
 			gen.MidiFileData->Tracks.Add(MoveTemp(track));
 
 			gen.MidiDataProxy = MakeShared<FMidiFileProxy, ESPMode::ThreadSafe>(gen.MidiFileData);
+
+
 			Outputs.MidiStream->SetMidiFile(gen.MidiDataProxy);
 
 			Outputs.MidiClock->RegisterHiResPlayCursor(this);
@@ -89,41 +94,55 @@ namespace Metasound
 			//Outputs.MidiStream->SetTicksPerQuarterNote(1);
 
 			Outputs.MidiClock->AttachToMidiResource(gen.MidiFileData);
-
-			TryUpdateGenThreadInput();
 		}
 
 		std::int32_t nextTokenToProcess = 0;
 		MidiConverterHandle converter = nullptr;
 		int32 AddedTicks = 0;
 
+		void OnRemoveGen()
+		{
+			if (Generator != nullptr)
+			{
+				TokenModifSection.Lock();
+				Generator->GenThread->OnGenerated.Unbind();
+				NewEncodedTokens.Empty();
+				TokenModifSection.Unlock();
+			}
+		}
+
 		void TryUpdateGenThreadInput()
 		{
-			if (Inputs.Generator.Get() != nullptr && Inputs.Generator->GetProxy().IsValid() && Generator != Inputs.Generator->GetProxy()->MidiGenerator)
+			TSharedPtr<FMIDIGeneratorEnv> NewGen;
+			if (Inputs.Generator.Get() != nullptr && Inputs.Generator->GetProxy().IsValid())
 			{
+				NewGen = Inputs.Generator->GetProxy()->MidiGenerator;
+			}
+
+			if (Generator != NewGen)
+			{
+				OnRemoveGen();
+				//if (Generator != nullptr)
+				//{
+				//	TokenModifSection.Lock();
+				//	Generator->GenThread->OnGenerated.Unbind();
+				//	NewEncodedTokens.Empty();
+				//	TokenModifSection.Unlock();
+				//}
+
+				Generator = NewGen;
+
 				if (Generator != nullptr)
 				{
 					TokenModifSection.Lock();
-					Generator->GenThread->OnGenerated.Unbind();
-					NewEncodedTokens.Empty();
-					TokenModifSection.Unlock();
-				}
-
-				Generator = Inputs.Generator->GetProxy()->MidiGenerator;
-
-				if (Generator != nullptr)
-				{
-					TokenModifSection.Lock();
-					if (!Generator->GenThread->HasStarted())
-					{
-						Generator->GenThread->OnGenerated.BindLambda([this](int32 NewToken)
-							{
-								TokenModifSection.Lock();
-								bShouldUpdateTokens = true;
-								NewEncodedTokens.Add(NewToken);
-								TokenModifSection.Unlock();
-							});
-					}
+					OnGenEnvSet(*Generator);
+					Generator->GenThread->OnGenerated.BindLambda([this](int32 NewToken)
+						{
+							TokenModifSection.Lock();
+							bShouldUpdateTokens = true;
+							NewEncodedTokens.Add(NewToken);
+							TokenModifSection.Unlock();
+						});
 					TokenModifSection.Unlock();
 
 					if (!Generator->GenThread->HasStarted())
@@ -230,6 +249,7 @@ namespace Metasound
 			destroyMidiConverter(converter);
 			if (Generator.IsValid())
 			{
+				OnRemoveGen();
 				Generator->StopGeneration();
 			}
 		}
@@ -323,6 +343,11 @@ namespace Metasound
 		void Execute()
 		{
 			TryUpdateGenThreadInput();
+
+			if (!Generator.IsValid())
+			{
+				return;
+			}
 
 			int32 currentTick = Outputs.MidiClock->GetCurrentHiResTick();
 			int32 lastTick = Generator->MidiFileData->Tracks[0].GetEvents().Last().GetTick();

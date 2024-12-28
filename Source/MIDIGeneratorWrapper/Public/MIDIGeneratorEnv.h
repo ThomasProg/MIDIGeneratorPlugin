@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "UObject/NoExportTypes.h"
 #include "HarmonixMidi/MidiFile.h"
+#include "IAudioProxyInitializer.h"
 #include "MIDIGeneratorEnv.generated.h"
 
 struct FMIDIGeneratorEnv;
@@ -16,13 +17,12 @@ class FMIDIGeneratorProxy final : public Audio::TProxyData<FMIDIGeneratorProxy>
 public:
 	IMPL_AUDIOPROXY_CLASS(FMIDIGeneratorProxy);
 
-	explicit FMIDIGeneratorProxy(const TSharedPtr<FMIDIGeneratorEnv>& Data)
-		: MidiGenerator(Data)
-	{}
-
-	//explicit FMIDIGeneratorProxy(FMIDIGeneratorEnv* Data)
+	//explicit FMIDIGeneratorProxy(const TSharedPtr<FMIDIGeneratorEnv>& Data)
 	//	: MidiGenerator(Data)
 	//{}
+
+	MIDIGENERATORWRAPPER_API explicit FMIDIGeneratorProxy(UMIDIGeneratorEnv* InGeneratorEnv);
+	MIDIGENERATORWRAPPER_API explicit FMIDIGeneratorProxy(const TSharedPtr<FMIDIGeneratorEnv>& InGeneratorEnv);
 
 	TSharedPtr<FMIDIGeneratorEnv> GetMidiFile()
 	{
@@ -71,7 +71,7 @@ public:
  * 
  */
 UCLASS(BlueprintType)
-class MIDIGENERATORWRAPPER_API UMIDIGeneratorEnv : public UObject
+class MIDIGENERATORWRAPPER_API UMIDIGeneratorEnv : public UObject, public IAudioProxyDataFactory
 {
 	GENERATED_BODY()
 
@@ -94,9 +94,18 @@ public:
 	int32 minIntensity = 0;
 	
 public:
+	UMIDIGeneratorEnv();
+
 	UFUNCTION(BlueprintCallable)
 	void StartGeneration();
 
 	UFUNCTION(BlueprintCallable)
 	void StopGeneration();
+
+	UFUNCTION(BlueprintCallable)
+	void PreStart(const FString& TokenizerPath, const FString& ModelPath, const TArray<int32>& InTokens);
+
+	//~Begin IAudioProxyDataFactory Interface.
+	virtual TSharedPtr<Audio::IProxyData> CreateProxyData(const Audio::FProxyDataInitParams& InitParams) override;
+	//~ End IAudioProxyDataFactory Interface.
 };
