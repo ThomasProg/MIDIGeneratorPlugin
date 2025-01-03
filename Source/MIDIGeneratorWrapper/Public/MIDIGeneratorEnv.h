@@ -6,6 +6,7 @@
 #include "UObject/NoExportTypes.h"
 #include "HarmonixMidi/MidiFile.h"
 #include "IAudioProxyInitializer.h"
+#include "fwd.h"
 #include "MIDIGeneratorEnv.generated.h"
 
 struct FMIDIGeneratorEnv;
@@ -58,11 +59,16 @@ public:
 	TSharedPtr<struct FMidiFileData> MidiFileData;
 	FMidiFileProxyPtr MidiDataProxy;
 
+	RangeGroupHandle CurrentRangeGroup = nullptr;
+
 public:
+	~FMIDIGeneratorEnv();
 	void StartGeneration();
 	void StopGeneration();
 
 	void PreStart(const FString& TokenizerPath, const FString& ModelPath, const TArray<int32>& InTokens);
+
+	void SetFilter();
 };
 
 
@@ -104,6 +110,9 @@ public:
 
 	UFUNCTION(BlueprintCallable)
 	void PreStart(const FString& TokenizerPath, const FString& ModelPath, const TArray<int32>& InTokens);
+
+	UFUNCTION(BlueprintCallable)
+	void SetFilter();
 
 	//~Begin IAudioProxyDataFactory Interface.
 	virtual TSharedPtr<Audio::IProxyData> CreateProxyData(const Audio::FProxyDataInitParams& InitParams) override;

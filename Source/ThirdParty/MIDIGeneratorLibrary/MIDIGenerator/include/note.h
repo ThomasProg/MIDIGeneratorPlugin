@@ -19,3 +19,9 @@ struct SearchArgs
     std::int32_t nbSequences;
     std::int32_t vocabSize;
 };
+
+struct Range
+{
+    int32_t min;
+    int32_t max;
+};

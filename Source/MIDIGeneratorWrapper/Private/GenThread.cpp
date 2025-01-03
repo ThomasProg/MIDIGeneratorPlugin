@@ -3,23 +3,23 @@
 
 #include "GenThread.h"
 
+FString FGenThread::RelativeToAbsoluteContentPath(const FString& BaseStr)
+{
+	if (BaseStr.Contains(":"))
+	{
+		return BaseStr;
+	}
+	else
+	{
+		FString FullPath = IFileManager::Get().ConvertToAbsolutePathForExternalAppForRead(*FPaths::ProjectContentDir());
+		return FullPath + BaseStr;
+	}
+}
+
 void FGenThread::PreStart(const FString& InTokenizerPath, const FString& InModelPath, const TArray<int32>& InTokens)
 {
-	auto GetPath = [](const FString& BaseStr) -> FString
-		{
-			if (BaseStr.Contains(":"))
-			{
-				return BaseStr;
-			}
-			else
-			{
-				FString FullPath = IFileManager::Get().ConvertToAbsolutePathForExternalAppForRead(*FPaths::ProjectContentDir());
-				return FullPath + BaseStr;
-			}
-		};
-
-	this->TokenizerPath = GetPath(*InTokenizerPath);
-	this->ModelPath = GetPath(*InModelPath);
+	this->TokenizerPath = RelativeToAbsoluteContentPath(InTokenizerPath);
+	this->ModelPath = RelativeToAbsoluteContentPath(InModelPath);
 	this->EncodedLine = InTokens;
 }
 
@@ -53,68 +53,81 @@ FGenThread::~FGenThread()
 
 bool FGenThread::Init() 
 {
-	Generator.Init(TokenizerPath, ModelPath);
-	runInstance = generator_createRunInstance(Generator.generator);
+	//if (GetTok() == nullptr)
+	//{
+	//	return false;
+	//}
+	//Generator.Init(TokenizerPath, ModelPath);
+
+	env = createEnv(false);
+	Tokenizer->GetTokenizer()->Tokenizer = createMidiTokenizer(TCHAR_TO_UTF8(*TokenizerPath));
+	generator = createMusicGenerator();
+	generator_loadOnnxModel(generator, env, TCHAR_TO_UTF8(*ModelPath));
+	generator_setConfig(generator, 4, 256, 6);
+
+	runInstance = generator_createRunInstance(GetGen());
 	//runInstance = createRunInstance();
 	batch = createBatch();
 	runInstance_addBatch(runInstance, batch);
 	batch_set(batch, EncodedLine.GetData(), EncodedLine.Num(), 0);
 
-	//runInstance_setSearchStrategyData(runInstance, this);
+	//runInstance_setSearchStrategyData(runInstance, SearchStrategyData);
+	//runInstance_setSearchStrategy(runInstance, SearchStrategy);
 
+	//runInstance_setSearchStrategyData(runInstance, this);
 	//runInstance_setSearchStrategy(runInstance, [](const SearchArgs& args, void* searchStrategyData)
 	//	{
 	//		FGenThread& genThread = *(FGenThread*)searchStrategyData;
 
-	//		// pitch / velocity / duration
+	//		//// pitch / velocity / duration
 
-	//		bool hasPitch = false;
-	//		bool hasVelocity = false;
-	//		bool hasDuration = false;
+	//		//bool hasPitch = false;
+	//		//bool hasVelocity = false;
+	//		//bool hasDuration = false;
 
-	//		if (hasPitch && hasVelocity && hasDuration)
-	//		{
-	//			hasPitch = false;
-	//			hasVelocity = false;
-	//			hasDuration = false;
-	//		}
+	//		//if (hasPitch && hasVelocity && hasDuration)
+	//		//{
+	//		//	hasPitch = false;
+	//		//	hasVelocity = false;
+	//		//	hasDuration = false;
+	//		//}
 
-	//		auto filter = [](std::int32_t token, void* data) -> bool
-	//		{
-	//			FGenThread& genThread = *(FGenThread*)data;
+	//		//auto filter = [](std::int32_t token, void* data) -> bool
+	//		//{
+	//		//	FGenThread& genThread = *(FGenThread*)data;
 
-	//			std::int32_t* decodedTokens;
-	//			std::int32_t nbDecodedTokens;
-	//			// @TODO : thread safe
-	//			tokenizer_decodeToken(genThread.Generator.tok, token, &decodedTokens, &nbDecodedTokens);
+	//		//	std::int32_t* decodedTokens;
+	//		//	std::int32_t nbDecodedTokens;
+	//		//	// @TODO : thread safe
+	//		//	tokenizer_decodeToken(genThread.Generator.tok, token, &decodedTokens, &nbDecodedTokens);
 
-	//			for (std::int32_t i = 0; i < nbDecodedTokens; i++)
-	//			{
-	//				std::int32_t decodedToken = decodedTokens[i];
-	//				if (isPitch(genThread.Generator.tok, decodedToken))
-	//				{
-	//					std::int32_t pitch = getPitch(genThread.Generator.tok, decodedToken);
-	//					if (pitch > 80)
-	//					{
-	//						return false;
-	//					}
-	//				}
-	//			}
+	//		//	for (std::int32_t i = 0; i < nbDecodedTokens; i++)
+	//		//	{
+	//		//		std::int32_t decodedToken = decodedTokens[i];
+	//		//		if (isPitch(genThread.Generator.tok, decodedToken))
+	//		//		{
+	//		//			std::int32_t pitch = getPitch(genThread.Generator.tok, decodedToken);
+	//		//			if (pitch > 80)
+	//		//			{
+	//		//				return false;
+	//		//			}
+	//		//		}
+	//		//	}
 
-	//			return true;
+	//		//	return true;
 
-	//			//bool isIgnored = false;
-	//			//isIgnored = isIgnored || (genThread.hasPitch && isPitch(genThread.Generator.tok, token));
-	//			//isIgnored = isIgnored || (genThread.hasVelocity && isVelocity(genThread.Generator.tok, token));
-	//			//isIgnored = isIgnored || (genThread.hasDuration && isDuration(genThread.Generator.tok, token));
+	//		//	//bool isIgnored = false;
+	//		//	//isIgnored = isIgnored || (genThread.hasPitch && isPitch(genThread.Generator.tok, token));
+	//		//	//isIgnored = isIgnored || (genThread.hasVelocity && isVelocity(genThread.Generator.tok, token));
+	//		//	//isIgnored = isIgnored || (genThread.hasDuration && isDuration(genThread.Generator.tok, token));
 
-	//			//if (isIgnored)
-	//			//{
-	//			//	return false;
-	//			//}
+	//		//	//if (isIgnored)
+	//		//	//{
+	//		//	//	return false;
+	//		//	//}
 
 
-	//		};
+	//		//};
 
 	//		//MusicGenerator::getNextTokens_greedyFiltered(args, availableTokens->GetData(), availableTokens->Num());
 	//		//generator_getNextTokens_greedyFiltered(args, filter, searchStrategyData);
@@ -139,14 +152,14 @@ bool FGenThread::Init()
 	//				std::int32_t* decodedTokens = nullptr;
 	//				std::int32_t nbDecodedTokens = 0;
 	//				// @TODO : thread safe
-	//				tokenizer_decodeToken(genThread.Generator.tok, token, &decodedTokens, &nbDecodedTokens);
-
+	//				tokenizer_decodeToken(genThread.GetTok(), token, &decodedTokens, &nbDecodedTokens);
+	//					
 	//				for (std::int32_t i = 0; i < nbDecodedTokens; i++)
 	//				{
 	//					std::int32_t decodedToken = decodedTokens[i];
-	//					if (isPitch(genThread.Generator.tok, decodedToken))
+	//					if (isPitch(genThread.GetTok(), decodedToken))
 	//					{
-	//						std::int32_t pitch = getPitch(genThread.Generator.tok, decodedToken);
+	//						std::int32_t pitch = getPitch(genThread.GetTok(), decodedToken);
 	//						if (pitch > 80)
 	//						{
 	//							//added -= 0.5;
@@ -156,7 +169,7 @@ bool FGenThread::Init()
 	//				}
 
 	//				if (decodedTokens != nullptr)
-	//					tokenizer_decodeIDs_free(decodedTokens);
+	//					tokenizer_decodeToken_free(decodedTokens);
 
 	//				if (last_logits[token] + added > max_logit)
 	//				{
@@ -173,26 +186,26 @@ bool FGenThread::Init()
 	//				std::int32_t* decodedTokens = nullptr;
 	//				std::int32_t nbDecodedTokens = 0;
 	//				// @TODO : thread safe
-	//				tokenizer_decodeToken(genThread.Generator.tok, token, &decodedTokens, &nbDecodedTokens);
+	//				tokenizer_decodeToken(genThread.GetTok(), token, &decodedTokens, &nbDecodedTokens);
 
 	//				for (std::int32_t i = 0; i < nbDecodedTokens; i++)
 	//				{
 	//					std::int32_t decodedToken = decodedTokens[i];
 
-	//					if (isBarNone(genThread.Generator.tok, decodedToken))
+	//					if (isBarNone(genThread.GetTok(), decodedToken))
 	//					{
 	//						tokenizer_decodeIDs_free(decodedTokens);
 	//						return false;
 	//					}
 
-	//					if (isPosition(genThread.Generator.tok, decodedToken))
+	//					if (isPosition(genThread.GetTok(), decodedToken))
 	//					{
 	//						tokenizer_decodeIDs_free(decodedTokens);
 	//						return false;
 	//					}
 
 
-	//					if (i == 0 && isPitch(genThread.Generator.tok, decodedToken))
+	//					if (i == 0 && isPitch(genThread.GetTok(), decodedToken))
 	//					{
 	//						tokenizer_decodeIDs_free(decodedTokens);
 	//						return true;
@@ -331,12 +344,20 @@ uint32 FGenThread::Run()
 			}
 		}
 
-		generator_preGenerate(Generator.generator, runInstance);
+		runInstance_setSearchStrategyData(runInstance, SearchStrategyData);
+		runInstance_setSearchStrategy(runInstance, SearchStrategy);
+
+		if (SearchStrategyData == nullptr || SearchStrategy == nullptr)
+		{
+			continue;
+		}
+
+		generator_preGenerate(GetGen(), runInstance);
 		const char* errorMsg;
-		bool success = generator_generate(Generator.generator, runInstance, &errorMsg);
+		bool success = generator_generate(GetGen(), runInstance, &errorMsg);
 		verify(success);
 
-		generator_postGenerate(Generator.generator, runInstance);
+		generator_postGenerate(GetGen(), runInstance);
 
 		int32 newToken = batch_getLastGeneratedToken(batch);
 		EncodedLine.Add(newToken);
@@ -357,7 +378,10 @@ void FGenThread::Exit()
 	destroyBatch(batch);
 	destroyRunInstance(runInstance);
 
-	Generator.Deinit();
+	//Generator.Deinit();
+	destroyMusicGenerator(generator);
+	//destroyMidiTokenizer(tok);
+	destroyEnv(env);
 }
 
 void FGenThread::Stop() 

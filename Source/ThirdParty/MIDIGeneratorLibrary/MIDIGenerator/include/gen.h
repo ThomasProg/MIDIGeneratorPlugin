@@ -57,8 +57,16 @@ extern "C"
     API_EXPORT void tokenizer_decodeIDs(MidiTokenizerHandle tokenizer, const std::int32_t* inputIDs, std::int32_t size, std::int32_t** outputIDs, std::int32_t* outSize);
     API_EXPORT void tokenizer_decodeIDs_free(std::int32_t* outputIDs);
 
-    // outDecodedTokens stays valid until the next call to this function
     API_EXPORT void tokenizer_decodeToken(MidiTokenizerHandle tokenizer, std::int32_t encodedToken, std::int32_t** outDecodedTokens, std::int32_t* outNbDecodedTokens);
+    API_EXPORT void tokenizer_decodeToken_free(std::int32_t* outputIDs);
+
+
+    API_EXPORT void tokenizer_addTokensStartingByPosition(MidiTokenizerHandle tokenizer, RangeGroupHandle outRangeGroup);
+    API_EXPORT void tokenizer_addTokensStartingByBarNone(MidiTokenizerHandle tokenizer, RangeGroupHandle outRangeGroup);
+    API_EXPORT void tokenizer_addTokensStartingByPitch(MidiTokenizerHandle tokenizer, RangeGroupHandle outRangeGroup);
+    API_EXPORT void tokenizer_addTokensStartingByVelocity(MidiTokenizerHandle tokenizer, RangeGroupHandle outRangeGroup);
+    API_EXPORT void tokenizer_addTokensStartingByDuration(MidiTokenizerHandle tokenizer, RangeGroupHandle outRangeGroup);
+
 }
 
 
@@ -131,5 +139,19 @@ extern "C"
 
 }
 
+
+// RangeGroup
+extern "C" 
+{
+    API_EXPORT RangeGroupHandle createRangeGroup();
+    API_EXPORT RangeGroupHandle cloneRangeGroup(RangeGroupHandle rangeGroup);
+    API_EXPORT void destroyRangeGroup(RangeGroupHandle rangeGroup);
+
+    API_EXPORT void rangeGroupAdd(RangeGroupHandle rangeGroup, int32_t nb);
+    API_EXPORT void rangeGroupAddRange(RangeGroupHandle rangeGroup, int32_t min, int32_t max);
+    API_EXPORT void rangeGroupGetRanges(RangeGroupHandle rangeGroup, Range const** ranges, size_t* nbElements);
+
+
+}
 
 

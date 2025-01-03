@@ -158,8 +158,23 @@ namespace Metasound
 			}
 		}
 
+		MidiTokenizerHandle GetTok() const
+		{
+			return Generator->GenThread->GetTok();
+		}
+
+		MusicGeneratorHandle GetGen() const
+		{
+			return Generator->GenThread->GetGen();
+		}
+
 		void UpdateScheduledMidiEvents()
 		{
+			if (GetTok() == nullptr)
+			{
+				return;
+			}
+
 			Outputs.MidiClock->GetDrivingMidiPlayCursorMgr()->LockForMidiDataChanges();
 
 			struct Args
@@ -174,7 +189,7 @@ namespace Metasound
 			if (converter == nullptr)
 				converter = createMidiConverter();
 
-			converterSetTokenizer(converter, Generator->GenThread->Generator.tok);
+			converterSetTokenizer(converter, GetTok());
 
 			int32 currentTick = Outputs.MidiClock->GetCurrentHiResTick();
 
@@ -210,7 +225,7 @@ namespace Metasound
 
 			int32* newDecodedTokens = nullptr;
 			int32 newDecodedTokensSize = 0;
-			tokenizer_decodeIDs(Generator->GenThread->Generator.tok, NewEncodedTokens.GetData(), NewEncodedTokens.Num(), &newDecodedTokens, &newDecodedTokensSize);
+			tokenizer_decodeIDs(GetTok(), NewEncodedTokens.GetData(), NewEncodedTokens.Num(), &newDecodedTokens, &newDecodedTokensSize);
 			NewEncodedTokens.Empty();
 			for (int32 newDecodedTokenIndex = 0; newDecodedTokenIndex < newDecodedTokensSize; newDecodedTokenIndex++)
 			{
@@ -344,7 +359,7 @@ namespace Metasound
 		{
 			TryUpdateGenThreadInput();
 
-			if (!Generator.IsValid())
+			if ((!Generator.IsValid()) || GetTok() == nullptr || GetGen() == nullptr)
 			{
 				return;
 			}

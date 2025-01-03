@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "MIDIGenerator.h"
+#include "TokenizerAsset.h"
 
 DECLARE_CYCLE_STAT(TEXT("GenThread"), STAT_GenThread, STATGROUP_Game);
 
@@ -49,10 +50,30 @@ public:
 
 	~FGenThread();
 
+	MidiTokenizerHandle GetTok() const
+	{
+		return Tokenizer->GetTokenizer()->Tokenizer;
+	}
+	MusicGeneratorHandle GetGen() const
+	{
+		return generator;
+	}
+
+	static FString RelativeToAbsoluteContentPath(const FString& BaseStr);
+
+
+	EnvHandle env;
+	MusicGeneratorHandle generator;
+
 
 	FString TokenizerPath; 
 	FString ModelPath;
-	FMIDIGenerator Generator;
+	//FMIDIGenerator Generator;
+
+	FTokenizerProxyPtr Tokenizer = MakeShared<FTokenizerProxy>((MidiTokenizerHandle)nullptr);
+
+	void* SearchStrategyData = nullptr;
+	TSearchStrategy SearchStrategy = nullptr;
 
 	RunInstanceHandle runInstance;
 	BatchHandle batch;

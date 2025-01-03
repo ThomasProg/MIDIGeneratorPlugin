@@ -31,6 +31,7 @@ using TokenSequence = TokSequence;
 class MIDIConverter;
 struct Batch;
 struct SearchArgs;
+class RangeGroup;
 
 using EnvHandle = Ort::Env*;
 using MidiTokenizerHandle = MidiTokenizer*;
@@ -40,6 +41,7 @@ using RunInstanceHandle = RunInstance*;
 using TokenSequenceHandle = TokenSequence*;
 using MidiConverterHandle = MIDIConverter*;
 using BatchHandle = Batch*;
+using RangeGroupHandle = RangeGroup*;
 
 using DataType = std::int32_t;
 
