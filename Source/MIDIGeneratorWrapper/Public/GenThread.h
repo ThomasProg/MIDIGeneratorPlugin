@@ -9,6 +9,7 @@
 DECLARE_CYCLE_STAT(TEXT("GenThread"), STAT_GenThread, STATGROUP_Game);
 
 DECLARE_DELEGATE_OneParam(FOnGenerated, int32);
+DECLARE_DELEGATE_OneParam(FOnSearch, const struct SearchArgs& args);
 
 //class FGenThread;
 //class FMIDIGeneratorProxy;
@@ -59,12 +60,33 @@ public:
 		return generator;
 	}
 
+	void GetEncodedTokens(TArray<int32>& OutEncodedTokens)
+	{
+		Mutex.Lock();
+		OutEncodedTokens = EncodedTokens;
+		Mutex.Unlock();
+	}
+
 	static FString RelativeToAbsoluteContentPath(const FString& BaseStr);
 
+	//void SetSearchStrategy(void* SearchStrategyData, TSearchStrategy SearchStrategy);
+	void SetSearchStrategy(FOnSearch InOnSearch);
+	void SetOnGenerated(FOnGenerated InOnGenerated);
 
+	// BEGIN FRunnable 
+	virtual void Stop() override;
+	// END FRunnable
+
+protected:
+	// BEGIN FRunnable 
+	virtual bool Init() override;
+	virtual uint32 Run() override;
+	virtual void Exit() override;
+	// END FRunnable
+
+private:
 	EnvHandle env;
 	MusicGeneratorHandle generator;
-
 
 	FString TokenizerPath; 
 	FString ModelPath;
@@ -72,13 +94,16 @@ public:
 
 	FTokenizerProxyPtr Tokenizer = MakeShared<FTokenizerProxy>((MidiTokenizerHandle)nullptr);
 
-	void* SearchStrategyData = nullptr;
-	TSearchStrategy SearchStrategy = nullptr;
+	//void* SearchStrategyData = nullptr;
+	//TSearchStrategy SearchStrategy = nullptr;
+	FOnSearch OnSearch;
+	FOnGenerated OnGenerated;
+	FCriticalSection Mutex;
 
 	RunInstanceHandle runInstance;
 	BatchHandle batch;
 
-	TArray<int32> EncodedLine;
+	TArray<int32> EncodedTokens;
 	//int32 LineNbMaxToken = 256;
 	int32 LineNbMaxToken = 511;
 	int32 NbMaxTokensAhead = 50;
@@ -87,25 +112,8 @@ public:
 
 	bool forceReupdate = false;
 
-
-	int32 NextTokenIndexToPlay = 0; // @TODO : Update from game thread and make thread safe
-
-	TArray<int32> TokenGroupToInsert;
-	int32 TokenGroupInsertTick = 10;
-
-	// @TODO : Thread safe
-	void AddTokenGroupToInsert(const TArray<int32>& TokenGroup);
-	void TryInsertTokenGroup();
-
-	virtual bool Init() override;
-	virtual uint32 Run() override;
-	virtual void Exit() override;
-	virtual void Stop() override;
-
 	FRunnableThread* Thread;
 	bool bShutdown = false;
-
-	FOnGenerated OnGenerated;
 
 	////~Begin IAudioProxyDataFactory Interface.
 	//virtual TSharedPtr<Audio::IProxyData> CreateProxyData(const Audio::FProxyDataInitParams& InitParams) override;

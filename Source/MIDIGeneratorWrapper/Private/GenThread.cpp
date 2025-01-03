@@ -20,7 +20,7 @@ void FGenThread::PreStart(const FString& InTokenizerPath, const FString& InModel
 {
 	this->TokenizerPath = RelativeToAbsoluteContentPath(InTokenizerPath);
 	this->ModelPath = RelativeToAbsoluteContentPath(InModelPath);
-	this->EncodedLine = InTokens;
+	this->EncodedTokens = InTokens;
 }
 
 void FGenThread::Start(const FString& InTokenizerPath, const FString& InModelPath, const TArray<int32>& InTokens)
@@ -51,7 +51,7 @@ FGenThread::~FGenThread()
 	}
 }
 
-bool FGenThread::Init() 
+bool FGenThread::Init()
 {
 	//if (GetTok() == nullptr)
 	//{
@@ -69,7 +69,23 @@ bool FGenThread::Init()
 	//runInstance = createRunInstance();
 	batch = createBatch();
 	runInstance_addBatch(runInstance, batch);
-	batch_set(batch, EncodedLine.GetData(), EncodedLine.Num(), 0);
+	batch_set(batch, EncodedTokens.GetData(), EncodedTokens.Num(), 0);
+
+	runInstance_setSearchStrategyData(runInstance, this);
+	runInstance_setSearchStrategy(runInstance, [](const struct SearchArgs& args, void* searchStrategyData)
+	{
+		FGenThread* GenThread = (FGenThread*)searchStrategyData;
+		GenThread->Mutex.Lock();
+		FOnSearch OnSearch = GenThread->OnSearch;
+		//void* SearchStrategyData = GenThread->SearchStrategyData;
+		//TSearchStrategy SearchStrategy = GenThread->SearchStrategy;
+		GenThread->Mutex.Unlock();
+
+		OnSearch.Execute(args);
+
+		//(*SearchStrategy)(args, SearchStrategyData);
+	});
+
 
 	//runInstance_setSearchStrategyData(runInstance, SearchStrategyData);
 	//runInstance_setSearchStrategy(runInstance, SearchStrategy);
@@ -284,39 +300,16 @@ bool FGenThread::Init()
 	return true;
 }
 
-void FGenThread::AddTokenGroupToInsert(const TArray<int32>& TokenGroup)
-{
-	TokenGroupToInsert = TokenGroup;
-}
-
-void FGenThread::TryInsertTokenGroup()
-{
-	//TArray<int32> DecodedLine = Decode(EncodedLine);
-
-	//int32 indexAfterTick = FindIndexAfterTick(DecodedLine, TokenGroupInsertTick);
-	//if (indexAfterTick < DecodedLine.Num())
-	//{
-	//	DecodedLine.SetNum(indexAfterTick, EAllowShrinking::No);
-
-	//	for (int32 token : TokenGroupToInsert)
-	//	{
-	//		DecodedLine.Push(token);
-	//	}
-	//}
-
-	//EncodedLine = Encode(DecodedLine);
-}
-
-uint32 FGenThread::Run() 
+uint32 FGenThread::Run()
 {
 	if (!forceReupdate)
 	{
 		TArray<int32> Context;
 		//LineNbMaxToken = 512;
-		int32 start = FMath::Max(0, EncodedLine.Num() - LineNbMaxToken);
-		for (int32 i = start; i < EncodedLine.Num(); i++)
+		int32 start = FMath::Max(0, EncodedTokens.Num() - LineNbMaxToken);
+		for (int32 i = start; i < EncodedTokens.Num(); i++)
 		{
-			Context.Add(EncodedLine[i]);
+			Context.Add(EncodedTokens[i]);
 		}
 
 		batch_set(batch, Context.GetData(), Context.Num(), start);
@@ -324,7 +317,7 @@ uint32 FGenThread::Run()
 		runInstance_setMaxInputLength(runInstance, LineNbMaxToken);
 	}
 
-	while (!bShutdown) 
+	while (!bShutdown)
 	{
 		SCOPE_CYCLE_COUNTER(STAT_GenThread);
 
@@ -334,23 +327,28 @@ uint32 FGenThread::Run()
 
 			{
 				TArray<int32> Context;
-				int32 start = FMath::Max(0, EncodedLine.Num() - LineNbMaxToken);
-				for (int32 i = start; i < EncodedLine.Num(); i++)
+				int32 start = FMath::Max(0, EncodedTokens.Num() - LineNbMaxToken);
+				for (int32 i = start; i < EncodedTokens.Num(); i++)
 				{
-					Context.Add(EncodedLine[i]);
+					Context.Add(EncodedTokens[i]);
 				}
 
 				batch_set(batch, Context.GetData(), Context.Num(), start);
 			}
 		}
 
-		runInstance_setSearchStrategyData(runInstance, SearchStrategyData);
-		runInstance_setSearchStrategy(runInstance, SearchStrategy);
+		//if (SearchStrategyData == nullptr || SearchStrategy == nullptr)
+		//{
+		//	continue;
+		//}
 
-		if (SearchStrategyData == nullptr || SearchStrategy == nullptr)
+		Mutex.Lock();
+		if (!OnSearch.IsBound())
 		{
+			Mutex.Unlock();
 			continue;
 		}
+		Mutex.Unlock();
 
 		generator_preGenerate(GetGen(), runInstance);
 		const char* errorMsg;
@@ -360,10 +358,10 @@ uint32 FGenThread::Run()
 		generator_postGenerate(GetGen(), runInstance);
 
 		int32 newToken = batch_getLastGeneratedToken(batch);
-		EncodedLine.Add(newToken);
+		EncodedTokens.Add(newToken);
 
 
-		TryInsertTokenGroup();
+		//TryInsertTokenGroup();
 
 		if (!bShutdown)
 			OnGenerated.ExecuteIfBound(newToken);
@@ -387,6 +385,28 @@ void FGenThread::Exit()
 void FGenThread::Stop() 
 {
 	bShutdown = true;
+}
+
+//void FGenThread::SetSearchStrategy(void* InSearchStrategyData, TSearchStrategy InSearchStrategy)
+//{
+//	Mutex.Lock();
+//	SearchStrategyData = InSearchStrategyData;
+//	SearchStrategy = InSearchStrategy;
+//	Mutex.Unlock();
+//}
+
+void FGenThread::SetSearchStrategy(FOnSearch InOnSearch)
+{
+	Mutex.Lock();
+	OnSearch = InOnSearch;
+	Mutex.Unlock();
+}
+
+void FGenThread::SetOnGenerated(FOnGenerated InOnGenerated)
+{
+	Mutex.Lock();
+	OnGenerated = InOnGenerated;
+	Mutex.Unlock();
 }
 
 //TSharedPtr<Audio::IProxyData> FGenThread::CreateProxyData(const Audio::FProxyDataInitParams& InitParams)

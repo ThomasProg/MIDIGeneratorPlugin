@@ -53,8 +53,9 @@ public:
 
 	TSharedPtr<class FGenThread> GenThread = MakeShared<FGenThread>();
 
+	TArray<int32> NewEncodedTokens;
 	bool bShouldUpdateTokens = false;
-	FCriticalSection TokenModifSection;
+	FCriticalSection EncodedTokensSection;
 
 	TSharedPtr<struct FMidiFileData> MidiFileData;
 	FMidiFileProxyPtr MidiDataProxy;

@@ -37,40 +37,39 @@ void FMIDIGeneratorEnv::PreStart(const FString& TokenizerPath, const FString& Mo
 
 void FMIDIGeneratorEnv::StartGeneration()
 {
-	GenThread->Start();
+	//GenThread->Start();
 
-	//if (!GenThread->HasStarted())
-	//{
-	//	int32 CurrentTempo = 120;
-	//	int32 CurrentTimeSigNum = 4;
-	//	int32 CurrentTimeSigDenom = 4;
-	//	MidiFileData = HarmonixMetasound::FMidiClock::MakeClockConductorMidiData(CurrentTempo, CurrentTimeSigNum, CurrentTimeSigDenom);
+	if (!GenThread->HasStarted())
+	{
+		int32 CurrentTempo = 120;
+		int32 CurrentTimeSigNum = 4;
+		int32 CurrentTimeSigDenom = 4;
+		MidiFileData = HarmonixMetasound::FMidiClock::MakeClockConductorMidiData(CurrentTempo, CurrentTimeSigNum, CurrentTimeSigDenom);
 
-	//	MidiFileData->MidiFileName = "Generated";
-	//	MidiFileData->TicksPerQuarterNote = 16;
-	//	FMidiTrack track;
-	//	track.AddEvent(FMidiEvent(0, FMidiMsg::CreateAllNotesKill()));
-	//	MidiFileData->Tracks.Add(MoveTemp(track));
+		MidiFileData->MidiFileName = "Generated";
+		MidiFileData->TicksPerQuarterNote = 16;
+		FMidiTrack track;
+		track.AddEvent(FMidiEvent(0, FMidiMsg::CreateAllNotesKill()));
+		MidiFileData->Tracks.Add(MoveTemp(track));
 
-	//	MidiDataProxy = MakeShared<FMidiFileProxy, ESPMode::ThreadSafe>(MidiFileData);
+		MidiDataProxy = MakeShared<FMidiFileProxy, ESPMode::ThreadSafe>(MidiFileData);
 
+		GenThread->SetOnGenerated(FOnGenerated::CreateLambda([this](int32 NewToken)
+		{
+			EncodedTokensSection.Lock();
+			bShouldUpdateTokens = true;
+			NewEncodedTokens.Add(NewToken);
+			EncodedTokensSection.Unlock();
+		}));
 
-
-	//	GenThread->OnGenerated.BindLambda([this](int32 NewToken)
-	//		{
-	//			//TokenModifSection.Lock();
-	//			//bShouldUpdateTokens = true;
-	//			//NewEncodedTokens.Add(NewToken);
-	//			//TokenModifSection.Unlock();
-	//		});
-
-	//	GenThread->Start();
-	//}
+		GenThread->Start();
+	}
 }
 
 void FMIDIGeneratorEnv::StopGeneration()
 {
 	GenThread->Stop();
+	GenThread->SetOnGenerated(nullptr);
 }
 
 void FMIDIGeneratorEnv::SetFilter()
@@ -101,7 +100,12 @@ void FMIDIGeneratorEnv::SetFilter()
 	RangeGroupHandle DurationRangeGroup = cloneRangeGroup(BaseRangeGroup);
 	tokenizer_addTokensStartingByDuration(tok, DurationRangeGroup);
 
-	CurrentRangeGroup = PitchRangeGroup;
+	RangeGroupHandle AllRangeGroup = cloneRangeGroup(BaseRangeGroup);
+	tokenizer_addTokensStartingByPitch(tok, AllRangeGroup);
+	tokenizer_addTokensStartingByVelocity(tok, AllRangeGroup);
+	tokenizer_addTokensStartingByDuration(tok, AllRangeGroup);
+
+	CurrentRangeGroup = AllRangeGroup;
 
 
 
@@ -112,13 +116,9 @@ void FMIDIGeneratorEnv::SetFilter()
 
 
 
-
-	GenThread->SearchStrategyData = this;
-	GenThread->SearchStrategy = [](const SearchArgs& args, void* searchStrategyData)
+	GenThread->SetSearchStrategy(FOnSearch::CreateLambda([this](const SearchArgs& args)
 		{
-			FMIDIGeneratorEnv& genEnv = *(FMIDIGeneratorEnv*)searchStrategyData;
-			MidiTokenizerHandle tok = genEnv.GenThread->GetTok();
-			RangeGroupHandle CurrentRangeGroup = genEnv.CurrentRangeGroup;
+			//MidiTokenizerHandle tok = GenThread->GetTok();
 
 			Range const * ranges;
 			size_t nbRanges;
@@ -173,7 +173,7 @@ void FMIDIGeneratorEnv::SetFilter()
 				}
 				args.outNextTokens[b] = max_index;
 			}
-		};
+		}));
 
 
 
