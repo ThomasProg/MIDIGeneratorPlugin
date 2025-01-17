@@ -96,20 +96,9 @@ namespace Metasound
 			Outputs.MidiClock->AttachToMidiResource(gen.MidiFileData);
 		}
 
-		std::int32_t nextTokenToProcess = 0;
-		MidiConverterHandle converter = nullptr;
-		int32 AddedTicks = 0;
-
-		void OnRemoveGen()
-		{
-			if (Generator != nullptr)
-			{
-				TokenModifSection.Lock();
-				Generator->GenThread->SetOnGenerated(nullptr);
-				Generator->NewEncodedTokens.Empty();
-				TokenModifSection.Unlock();
-			}
-		}
+		//std::int32_t nextTokenToProcess = 0;
+		////MidiConverterHandle converter = nullptr;
+		//int32 AddedTicks = 0;
 
 		void TryUpdateGenThreadInput()
 		{
@@ -121,46 +110,29 @@ namespace Metasound
 
 			if (Generator != NewGen)
 			{
-				OnRemoveGen();
-				//if (Generator != nullptr)
-				//{
-				//	TokenModifSection.Lock();
-				//	Generator->GenThread->OnGenerated.Unbind();
-				//	NewEncodedTokens.Empty();
-				//	TokenModifSection.Unlock();
-				//}
-
 				Generator = NewGen;
 
 				if (Generator != nullptr)
 				{
-					TokenModifSection.Lock();
 					OnGenEnvSet(*Generator);
-					Generator->GenThread->SetOnGenerated(FOnGenerated::CreateLambda([this](int32 NewToken)
-						{
-							TokenModifSection.Lock();
-							bShouldUpdateTokens = true;
-							Generator->NewEncodedTokens.Add(NewToken);
-							TokenModifSection.Unlock();
-						}));
-					TokenModifSection.Unlock();
 
 					if (!Generator->GenThread->HasStarted())
 					{
 						Generator->StartGeneration();
 					}
 
-					TokenModifSection.Lock();
-					Generator->GenThread->GetEncodedTokens(Generator->NewEncodedTokens);
-					UpdateScheduledMidiEvents();
-					TokenModifSection.Unlock();
+					//TokenModifSection.Lock();
+					//Generator->GenThread->GetEncodedTokens(Generator->NewEncodedTokens);
+					//UpdateScheduledMidiEvents();
+					//TokenModifSection.Unlock();
+					Generator->DecodeTokens();
 				}
 			}
 		}
 
 		MidiTokenizerHandle GetTok() const
 		{
-			return Generator->GenThread->GetTok();
+			return Generator->GenThread->GetTok().GetTokenizer();
 		}
 
 		MusicGeneratorHandle GetGen() const
@@ -168,103 +140,103 @@ namespace Metasound
 			return Generator->GenThread->GetGen();
 		}
 
-		void UpdateScheduledMidiEvents()
-		{
-			if (GetTok() == nullptr)
-			{
-				return;
-			}
+		//void UpdateScheduledMidiEvents()
+		//{
+		//	if (GetTok() == nullptr)
+		//	{
+		//		return;
+		//	}
 
-			Outputs.MidiClock->GetDrivingMidiPlayCursorMgr()->LockForMidiDataChanges();
+		//	Outputs.MidiClock->GetDrivingMidiPlayCursorMgr()->LockForMidiDataChanges();
 
-			struct Args
-			{
-				FAIGenOperator* self;
+		//	struct Args
+		//	{
+		//		FAIGenOperator* self;
 
-				int32 LastTick = 0;
-			};
+		//		int32 LastTick = 0;
+		//	};
 
-			Args args{ this };
+		//	Args args{ this };
 
-			if (converter == nullptr)
-				converter = createMidiConverter();
+		//	//if (converter == nullptr)
+		//	//	converter = createMidiConverter();
 
-			converterSetTokenizer(converter, GetTok());
+		//	converterSetTokenizer(converter, GetTok());
 
-			int32 currentTick = Outputs.MidiClock->GetCurrentHiResTick();
+		//	int32 currentTick = Outputs.MidiClock->GetCurrentHiResTick();
 
-			converterSetOnNote(converter, [](void* data, const Note& newNote)
-				{
-					Args& args = *(Args*)(data);
+		//	converterSetOnNote(converter, [](void* data, const Note& newNote)
+		//		{
+		//			Args& args = *(Args*)(data);
 
-					int32 Channel = 1;
-					int32 NoteNumber = newNote.pitch;
-					int32 Velocity = newNote.velocity;
+		//			int32 Channel = 1;
+		//			int32 NoteNumber = newNote.pitch;
+		//			int32 Velocity = newNote.velocity;
 
-					int32 Track = 0;
+		//			int32 Track = 0;
 
-					int32 CurrentTick = args.self->Outputs.MidiClock->GetCurrentHiResTick();
+		//			int32 CurrentTick = args.self->Outputs.MidiClock->GetCurrentHiResTick();
 
-					int32 Tick = newNote.tick * 100 + args.self->AddedTicks;
+		//			int32 Tick = newNote.tick * 100 + args.self->AddedTicks;
 
-					if (Tick < CurrentTick)
-					{
-						args.self->AddedTicks += CurrentTick - Tick;
-						Tick = CurrentTick;
-					}
+		//			if (Tick < CurrentTick)
+		//			{
+		//				args.self->AddedTicks += CurrentTick - Tick;
+		//				Tick = CurrentTick;
+		//			}
 
-					if (args.self->Generator->MidiFileData->Tracks[0].GetUnsortedEvents().IsEmpty() or Tick >= args.self->Generator->MidiFileData->Tracks[0].GetEvents().Last().GetTick())
-					{
-						args.LastTick = Tick;
+		//			if (args.self->Generator->MidiFileData->Tracks[0].GetUnsortedEvents().IsEmpty() or Tick >= args.self->Generator->MidiFileData->Tracks[0].GetEvents().Last().GetTick())
+		//			{
+		//				args.LastTick = Tick;
 
-						FMidiMsg Msg{ FMidiMsg::CreateNoteOn(Channel - 1, NoteNumber, Velocity) };
-						args.self->Generator->MidiFileData->Tracks[0].AddEvent(FMidiEvent(Tick, Msg));
-					}
+		//				FMidiMsg Msg{ FMidiMsg::CreateNoteOn(Channel - 1, NoteNumber, Velocity) };
+		//				args.self->Generator->MidiFileData->Tracks[0].AddEvent(FMidiEvent(Tick, Msg));
+		//			}
 
-				});
+		//		});
 
-			int32* newDecodedTokens = nullptr;
-			int32 newDecodedTokensSize = 0;
-			tokenizer_decodeIDs(GetTok(), Generator->NewEncodedTokens.GetData(), Generator->NewEncodedTokens.Num(), &newDecodedTokens, &newDecodedTokensSize);
-			Generator->NewEncodedTokens.Empty();
-			for (int32 newDecodedTokenIndex = 0; newDecodedTokenIndex < newDecodedTokensSize; newDecodedTokenIndex++)
-			{
-				DecodedTokens.Add(newDecodedTokens[newDecodedTokenIndex]);
-			}
+		//	int32* newDecodedTokens = nullptr;
+		//	int32 newDecodedTokensSize = 0;
+		//	tokenizer_decodeIDs(GetTok(), Generator->NewEncodedTokens.GetData(), Generator->NewEncodedTokens.Num(), &newDecodedTokens, &newDecodedTokensSize);
+		//	Generator->NewEncodedTokens.Empty();
+		//	for (int32 newDecodedTokenIndex = 0; newDecodedTokenIndex < newDecodedTokensSize; newDecodedTokenIndex++)
+		//	{
+		//		DecodedTokens.Add(newDecodedTokens[newDecodedTokenIndex]);
+		//	}
 
-			tokenizer_decodeIDs_free(newDecodedTokens);
+		//	tokenizer_decodeIDs_free(newDecodedTokens);
 
-			std::int32_t i = nextTokenToProcess;
-			while (i < DecodedTokens.Num())
-			{
+		//	std::int32_t i = nextTokenToProcess;
+		//	while (i < DecodedTokens.Num())
+		//	{
 
-				bool isSuccess = converterProcessToken(converter, DecodedTokens.GetData(), DecodedTokens.Num(), &i, &args);
-				if (isSuccess)
-				{
-					nextTokenToProcess = i;
-				}
-				else
-				{
-					i++; // ignore current token and continue
-				}
-			}
+		//		bool isSuccess = converterProcessToken(converter, DecodedTokens.GetData(), DecodedTokens.Num(), &i, &args);
+		//		if (isSuccess)
+		//		{
+		//			nextTokenToProcess = i;
+		//		}
+		//		else
+		//		{
+		//			i++; // ignore current token and continue
+		//		}
+		//	}
 
-			ensureMsgf(!Generator->MidiFileData->Tracks[0].GetUnsortedEvents().IsEmpty(), TEXT("Should not be empty!"));
-			//checkf((Index >= 0)& (Index < ArrayNum), TEXT("Array index out of bounds: %lld into an array of size %lld"), (long long)Index, (long long)ArrayNum); // & for one branch
+		//	ensureMsgf(!Generator->MidiFileData->Tracks[0].GetUnsortedEvents().IsEmpty(), TEXT("Should not be empty!"));
+		//	//checkf((Index >= 0)& (Index < ArrayNum), TEXT("Array index out of bounds: %lld into an array of size %lld"), (long long)Index, (long long)ArrayNum); // & for one branch
 
-			//Outputs.MidiClock->MidiDataChangesComplete(FMidiPlayCursorMgr::EMidiChangePositionCorrectMode::MaintainTick);
+		//	//Outputs.MidiClock->MidiDataChangesComplete(FMidiPlayCursorMgr::EMidiChangePositionCorrectMode::MaintainTick);
 
-			//MidiFileData->Tracks[0].Sort(); // TOO SLOW, O(n*log(n))
+		//	//MidiFileData->Tracks[0].Sort(); // TOO SLOW, O(n*log(n))
 
-			Outputs.MidiClock->GetDrivingMidiPlayCursorMgr()->MidiDataChangeComplete(FMidiPlayCursorMgr::EMidiChangePositionCorrectMode::MaintainTick);
-		}
+		//	Outputs.MidiClock->GetDrivingMidiPlayCursorMgr()->MidiDataChangeComplete(FMidiPlayCursorMgr::EMidiChangePositionCorrectMode::MaintainTick);
+		//}
 
 		~FAIGenOperator()
 		{
-			destroyMidiConverter(converter);
+			//destroyMidiConverter(converter);
 			if (Generator.IsValid())
 			{
-				OnRemoveGen();
+				//OnRemoveGen();
 				Generator->StopGeneration();
 			}
 		}
@@ -364,29 +336,34 @@ namespace Metasound
 				return;
 			}
 
-			int32 currentTick = Outputs.MidiClock->GetCurrentHiResTick();
-			int32 lastTick = Generator->MidiFileData->Tracks[0].GetEvents().Last().GetTick();
+			//int32 currentTick = Outputs.MidiClock->GetCurrentHiResTick();
+			//int32 lastTick = Generator->MidiFileData->Tracks[0].GetEvents().Last().GetTick();
 
-			if (Generator->GenThread.IsValid() && bShouldUpdateTokens)
-			{
-				TokenModifSection.Lock();
-				UpdateScheduledMidiEvents();
-				bShouldUpdateTokens = false;
-				TokenModifSection.Unlock();
-			}
+			//if (Generator->GenThread.IsValid() && bShouldUpdateTokens)
+			//{
+			//	TokenModifSection.Lock();
+			//	UpdateScheduledMidiEvents();
+			//	bShouldUpdateTokens = false;
+			//	TokenModifSection.Unlock();
+			//}
 
-			// Block until music is generated
-			while (Generator.IsValid() && Generator->GenThread.IsValid() && currentTick > lastTick)
-			{
-				if (bShouldUpdateTokens)
-				{
-					TokenModifSection.Lock();
-					UpdateScheduledMidiEvents();
-					bShouldUpdateTokens = false;
-					TokenModifSection.Unlock();
-				}
-				lastTick = Generator->MidiFileData->Tracks[0].GetEvents().Last().GetTick();
-			}
+			//// Block until music is generated
+			//while (Generator.IsValid() && Generator->GenThread.IsValid() && currentTick > lastTick)
+			//{
+			//	if (bShouldUpdateTokens)
+			//	{
+			//		TokenModifSection.Lock();
+			//		UpdateScheduledMidiEvents();
+			//		bShouldUpdateTokens = false;
+			//		TokenModifSection.Unlock();
+			//	}
+			//	lastTick = Generator->MidiFileData->Tracks[0].GetEvents().Last().GetTick();
+			//}
+
+			Generator->CurrentTick = Outputs.MidiClock->GetCurrentHiResTick();
+			Outputs.MidiClock->GetDrivingMidiPlayCursorMgr()->LockForMidiDataChanges();
+			Generator->DecodeTokens();
+			Outputs.MidiClock->GetDrivingMidiPlayCursorMgr()->MidiDataChangeComplete(FMidiPlayCursorMgr::EMidiChangePositionCorrectMode::MaintainTick);
 
 			Outputs.MidiStream->PrepareBlock();
 
@@ -527,7 +504,7 @@ namespace Metasound
 		bool Enabled{ true };
 
 		bool bShouldUpdateTokens = false;
-		FCriticalSection TokenModifSection;
+		//FCriticalSection TokenModifSection;
 	};
 
 

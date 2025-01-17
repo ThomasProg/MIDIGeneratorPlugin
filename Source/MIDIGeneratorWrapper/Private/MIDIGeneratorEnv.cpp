@@ -59,8 +59,52 @@ void FMIDIGeneratorEnv::StartGeneration()
 			EncodedTokensSection.Lock();
 			bShouldUpdateTokens = true;
 			NewEncodedTokens.Add(NewToken);
+
+			int32* newDecodedTokens = nullptr;
+			int32 newDecodedTokensSize = 0;
+			tokenizer_decodeToken(GenThread->GetTok().GetTokenizer(), NewToken, &newDecodedTokens, &newDecodedTokensSize);
+
+			//UE_LOG(LogTemp, Warning, TEXT("---"), NewToken);
+			for (int32 i = 0; i < newDecodedTokensSize; i++)
+			{
+				const char* str = GenThread->GetTok().DecodedTokenToString(newDecodedTokens[i]);
+				//UE_LOG(LogTemp, Warning, TEXT("%s"), ANSI_TO_TCHAR(str));
+			}
+
+			//UE_LOG(LogTemp, Warning, TEXT("Pitch : %d"), NewToken);
+			int32 LastToken = newDecodedTokens[newDecodedTokensSize - 1];
+			if (GenThread->GetTok().IsPitch(LastToken))
+			{
+				//UE_LOG(LogTemp, Warning, TEXT("Last Is Pitch"));
+				//CurrentRangeGroup = VelocityRangeGroup;
+				//UE_LOG(LogTemp, Warning, TEXT("VelocityGroup"));
+			}
+			else if (GenThread->GetTok().IsVelocity(LastToken))
+			{
+				//UE_LOG(LogTemp, Warning, TEXT("Last Is Velocity"));
+				//CurrentRangeGroup = DurationRangeGroup;
+				//UE_LOG(LogTemp, Warning, TEXT("DurationGroup"));
+			}
+			//else if (GenThread->GetTok().IsDuration(LastToken))
+			else
+			{
+				//UE_LOG(LogTemp, Warning, TEXT("Last Is Other"));
+				//CurrentRangeGroup = PitchRangeGroup;
+				//UE_LOG(LogTemp, Warning, TEXT("PitchGroup"));
+			}
+
+			tokenizer_decodeToken_free(newDecodedTokens);
+
 			EncodedTokensSection.Unlock();
 		}));
+
+		GenThread->SetOnInit(FOnInit::CreateLambda([this]()
+		{
+			SetFilter();
+		}));
+
+		// Set default tokens
+		GenThread->GetEncodedTokens(NewEncodedTokens);
 
 		GenThread->Start();
 	}
@@ -79,39 +123,68 @@ void FMIDIGeneratorEnv::SetFilter()
 	//	CurrentRangeGroup = createRangeGroup();
 	//}
 
-	MidiTokenizerHandle tok = GenThread->GetTok();
+	//const FTokenizer& tok = GenThread->GetTok();
+	MidiTokenizerHandle tok = GenThread->GetTok().GetTokenizer();
 
 	if (tok == nullptr)
 	{
 		return;
 	}
 
-	RangeGroupHandle BaseRangeGroup = createRangeGroup();
+	BaseRangeGroup = createRangeGroup();
 
 	tokenizer_addTokensStartingByPosition(tok, BaseRangeGroup);
 	tokenizer_addTokensStartingByBarNone(tok, BaseRangeGroup);
 
-	RangeGroupHandle PitchRangeGroup = cloneRangeGroup(BaseRangeGroup);
+	Range const* ranges;
+	size_t nbRanges;
+	rangeGroupGetRanges(BaseRangeGroup, &ranges, &nbRanges);
+
+	//for (std::int32_t rangeIndex = 0; rangeIndex < nbRanges; rangeIndex++)
+	//{
+	//	for (std::int32_t token = ranges[rangeIndex].min; token <= ranges[rangeIndex].max; token++)
+
+	//	//for (std::int32_t token = 0; token <= 200; token++)
+	//	{
+	//		//GenThread->GetTok().
+	//		int32* newDecodedTokens = nullptr;
+	//		int32 newDecodedTokensSize = 0;
+	//		tokenizer_decodeToken(GenThread->GetTok().Tokenizer, token,  &newDecodedTokens, &newDecodedTokensSize);
+
+	//		//for (int32 i = 0; i < newDecodedTokensSize; i++)
+	//		int32 i = 0;
+	//		{
+	//			const char* str = GenThread->GetTok().DecodedTokenToString(newDecodedTokens[i]);
+	//			//FString f = ANSI_TO_TCHAR(str);
+	//			//if (f.Contains("Position"))
+	//			UE_LOG(LogTemp, Warning, TEXT("%s"), ANSI_TO_TCHAR(str));
+	//		}
+
+	//		tokenizer_decodeToken_free(newDecodedTokens);
+	//	}
+	//}
+
+	UE_LOG(LogTemp, Warning, TEXT("-------------------------"));
+
+
+	PitchRangeGroup = cloneRangeGroup(BaseRangeGroup);
 	tokenizer_addTokensStartingByPitch(tok, PitchRangeGroup);
 
-	RangeGroupHandle VelocityRangeGroup = cloneRangeGroup(BaseRangeGroup);
+	VelocityRangeGroup = createRangeGroup();// cloneRangeGroup(BaseRangeGroup);
 	tokenizer_addTokensStartingByVelocity(tok, VelocityRangeGroup);
 
-	RangeGroupHandle DurationRangeGroup = cloneRangeGroup(BaseRangeGroup);
+	DurationRangeGroup = createRangeGroup(); //cloneRangeGroup(BaseRangeGroup);
 	tokenizer_addTokensStartingByDuration(tok, DurationRangeGroup);
 
-	RangeGroupHandle AllRangeGroup = cloneRangeGroup(BaseRangeGroup);
+	AllRangeGroup = cloneRangeGroup(BaseRangeGroup);
 	tokenizer_addTokensStartingByPitch(tok, AllRangeGroup);
 	tokenizer_addTokensStartingByVelocity(tok, AllRangeGroup);
 	tokenizer_addTokensStartingByDuration(tok, AllRangeGroup);
 
-	CurrentRangeGroup = AllRangeGroup;
+	//CurrentRangeGroup = PitchRangeGroup;
+	CurrentRangeGroup = AllRangeGroup; // we don't know what was the last token / @TODO : set according to the tokens set by the user at the start
 
 
-
-	Range const* ranges;
-	size_t nbRanges;
-	rangeGroupGetRanges(CurrentRangeGroup, &ranges, &nbRanges);
 
 
 
@@ -297,6 +370,82 @@ void FMIDIGeneratorEnv::SetFilter()
 	//};
 }
 
+void FMIDIGeneratorEnv::DecodeTokens()
+{
+	struct Args
+	{
+		FMIDIGeneratorEnv* self;
+
+		int32 LastTick = 0;
+	};
+
+	Args args{ this };
+
+	if (converter == nullptr)
+		converter = createMidiConverter();
+
+	converterSetTokenizer(converter, GenThread->GetTok().GetTokenizer());
+
+	converterSetOnNote(converter, [](void* data, const Note& newNote)
+		{
+			Args& args = *(Args*)(data);
+
+			int32 Channel = 1;
+			int32 NoteNumber = newNote.pitch;
+			int32 Velocity = newNote.velocity;
+
+			int32 Track = 0;
+
+			//int32 CurrentTick = 0;// args.self->Outputs.MidiClock->GetCurrentHiResTick();
+			int32 CurrentTick = args.self->CurrentTick;// args.self->Outputs.MidiClock->GetCurrentHiResTick();
+
+			int32 Tick = newNote.tick * 100 + args.self->AddedTicks;
+
+			if (Tick < CurrentTick)
+			{
+				args.self->AddedTicks += CurrentTick - Tick;
+				Tick = CurrentTick;
+			}
+
+			if (args.self->MidiFileData->Tracks[0].GetUnsortedEvents().IsEmpty() or Tick >= args.self->MidiFileData->Tracks[0].GetEvents().Last().GetTick())
+			{
+				args.LastTick = Tick;
+
+				FMidiMsg Msg{ FMidiMsg::CreateNoteOn(Channel - 1, NoteNumber, Velocity) };
+				args.self->MidiFileData->Tracks[0].AddEvent(FMidiEvent(Tick, Msg));
+			}
+
+		});
+
+	int32* newDecodedTokens = nullptr;
+	int32 newDecodedTokensSize = 0;
+	EncodedTokensSection.Lock();
+	tokenizer_decodeIDs(GenThread->GetTok().GetTokenizer(), NewEncodedTokens.GetData(), NewEncodedTokens.Num(), &newDecodedTokens, &newDecodedTokensSize);
+	NewEncodedTokens.Empty();
+	EncodedTokensSection.Unlock();
+	for (int32 newDecodedTokenIndex = 0; newDecodedTokenIndex < newDecodedTokensSize; newDecodedTokenIndex++)
+	{
+		DecodedTokens.Add(newDecodedTokens[newDecodedTokenIndex]);
+	}
+
+	tokenizer_decodeIDs_free(newDecodedTokens);
+
+	std::int32_t i = nextTokenToProcess;
+	while (i < DecodedTokens.Num())
+	{
+
+		bool isSuccess = converterProcessToken(converter, DecodedTokens.GetData(), DecodedTokens.Num(), &i, &args);
+		if (isSuccess)
+		{
+			nextTokenToProcess = i;
+		}
+		else
+		{
+			i++; // ignore current token and continue
+		}
+	}
+}
+
 UMIDIGeneratorEnv::UMIDIGeneratorEnv()
 {
 	Generator = MakeShared<FMIDIGeneratorProxy, ESPMode::ThreadSafe>(nullptr);
@@ -320,6 +469,11 @@ void UMIDIGeneratorEnv::PreStart(const FString& TokenizerPath, const FString& Mo
 void UMIDIGeneratorEnv::SetFilter()
 {
 	Generator->MidiGenerator->SetFilter();
+}
+
+void UMIDIGeneratorEnv::SetTokenizer(UTokenizerAsset* InTokenizer)
+{
+	Generator->MidiGenerator->GenThread->SetTok(InTokenizer->GetTokenizerPtr());
 }
 
 TSharedPtr<Audio::IProxyData> UMIDIGeneratorEnv::CreateProxyData(const Audio::FProxyDataInitParams& InitParams)

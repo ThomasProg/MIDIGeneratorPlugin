@@ -59,11 +59,19 @@ bool FGenThread::Init()
 	//}
 	//Generator.Init(TokenizerPath, ModelPath);
 
+	if (!Tokenizer.IsValid())
+	{
+		Tokenizer = MakeShared<FTokenizerProxy>((MidiTokenizerHandle)nullptr);
+	}
+	Tokenizer->GetTokenizer()->LoadIfInvalid(TokenizerPath);
+
 	env = createEnv(false);
-	Tokenizer->GetTokenizer()->Tokenizer = createMidiTokenizer(TCHAR_TO_UTF8(*TokenizerPath));
 	generator = createMusicGenerator();
 	generator_loadOnnxModel(generator, env, TCHAR_TO_UTF8(*ModelPath));
+	//generator_setConfig(generator, 4, 256, 6);
+	//generator_setVocabSize(generator, 30000);
 	generator_setConfig(generator, 4, 256, 6);
+	generator_setVocabSize(generator, 30000);
 
 	runInstance = generator_createRunInstance(GetGen());
 	//runInstance = createRunInstance();
@@ -85,6 +93,8 @@ bool FGenThread::Init()
 
 		//(*SearchStrategy)(args, SearchStrategyData);
 	});
+
+	OnInit.ExecuteIfBound();
 
 
 	//runInstance_setSearchStrategyData(runInstance, SearchStrategyData);
@@ -364,7 +374,11 @@ uint32 FGenThread::Run()
 		//TryInsertTokenGroup();
 
 		if (!bShutdown)
+		{
+			Mutex.Lock();
 			OnGenerated.ExecuteIfBound(newToken);
+			Mutex.Unlock();
+		}
 	}
 
 	return 0;
@@ -406,6 +420,13 @@ void FGenThread::SetOnGenerated(FOnGenerated InOnGenerated)
 {
 	Mutex.Lock();
 	OnGenerated = InOnGenerated;
+	Mutex.Unlock();
+}
+
+void FGenThread::SetOnInit(FOnInit InOnInit)
+{
+	Mutex.Lock();
+	OnInit = InOnInit;
 	Mutex.Unlock();
 }
 

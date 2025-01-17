@@ -39,6 +39,17 @@ extern "C"
     API_EXPORT void generator_getNextTokens_greedy(const SearchArgs& args);
 }
 
+// ModelInfo
+extern "C" 
+{
+    API_EXPORT void generator_setNbAttentionHeads(MusicGeneratorHandle generator, std::int64_t nbAttentionHeads);
+    API_EXPORT void generator_setHiddenSize(MusicGeneratorHandle generator, std::int64_t hiddenSize);
+    API_EXPORT void generator_setNbLayers(MusicGeneratorHandle generator, std::int64_t nbLayers);
+    API_EXPORT void generator_setVocabSize(MusicGeneratorHandle generator, std::int64_t vocabSize);
+    API_EXPORT void generator_setNbMaxPositions(MusicGeneratorHandle generator, std::int64_t nbMaxPositions);
+}
+
+
 // Redirector
 extern "C" 
 {
@@ -67,6 +78,7 @@ extern "C"
     API_EXPORT void tokenizer_addTokensStartingByVelocity(MidiTokenizerHandle tokenizer, RangeGroupHandle outRangeGroup);
     API_EXPORT void tokenizer_addTokensStartingByDuration(MidiTokenizerHandle tokenizer, RangeGroupHandle outRangeGroup);
 
+    API_EXPORT const char* tokenizer_decodedTokenToString(MidiTokenizerHandle tokenizer, std::int32_t decodedToken);
 }
 
 
@@ -117,6 +129,8 @@ extern "C"
     API_EXPORT bool isBarNone(MidiTokenizerHandle tokenizer, std::int32_t token);
     API_EXPORT bool isPosition(MidiTokenizerHandle tokenizer, std::int32_t token);
     API_EXPORT bool isPitch(MidiTokenizerHandle tokenizer, std::int32_t token);
+    API_EXPORT bool isDuration(MidiTokenizerHandle tokenizer, std::int32_t token);
+    API_EXPORT bool isVelocity(MidiTokenizerHandle tokenizer, std::int32_t token);
 
     API_EXPORT std::int32_t getPosition(MidiTokenizerHandle tokenizer, std::int32_t token);
     API_EXPORT std::int32_t getPitch(MidiTokenizerHandle tokenizer, std::int32_t token);
@@ -127,6 +141,8 @@ extern "C"
 extern "C" 
 {
     API_EXPORT MidiConverterHandle createMidiConverter();
+    API_EXPORT MidiConverterHandle createREMIConverter();
+    API_EXPORT MidiConverterHandle createTSDConverter();
     API_EXPORT void destroyMidiConverter(MidiConverterHandle converter);
 
     API_EXPORT void converterSetOnNote(MidiConverterHandle converter, void (*onNote)(void* data, const Note&));

@@ -10,6 +10,7 @@ DECLARE_CYCLE_STAT(TEXT("GenThread"), STAT_GenThread, STATGROUP_Game);
 
 DECLARE_DELEGATE_OneParam(FOnGenerated, int32);
 DECLARE_DELEGATE_OneParam(FOnSearch, const struct SearchArgs& args);
+DECLARE_DELEGATE(FOnInit);
 
 //class FGenThread;
 //class FMIDIGeneratorProxy;
@@ -51,10 +52,21 @@ public:
 
 	~FGenThread();
 
-	MidiTokenizerHandle GetTok() const
+	//MidiTokenizerHandle GetTok() const
+	//{
+	//	return Tokenizer->GetTokenizer()->Tokenizer;
+	//}
+
+	void SetTok(const FTokenizerProxyPtr& InTokenizer)
 	{
-		return Tokenizer->GetTokenizer()->Tokenizer;
+		Tokenizer = InTokenizer;
 	}
+
+	const FTokenizer& GetTok() const
+	{
+		return *Tokenizer->GetTokenizer();
+	}
+
 	MusicGeneratorHandle GetGen() const
 	{
 		return generator;
@@ -72,6 +84,7 @@ public:
 	//void SetSearchStrategy(void* SearchStrategyData, TSearchStrategy SearchStrategy);
 	void SetSearchStrategy(FOnSearch InOnSearch);
 	void SetOnGenerated(FOnGenerated InOnGenerated);
+	void SetOnInit(FOnInit InOnInit);
 
 	// BEGIN FRunnable 
 	virtual void Stop() override;
@@ -92,12 +105,13 @@ private:
 	FString ModelPath;
 	//FMIDIGenerator Generator;
 
-	FTokenizerProxyPtr Tokenizer = MakeShared<FTokenizerProxy>((MidiTokenizerHandle)nullptr);
+	FTokenizerProxyPtr Tokenizer;
 
 	//void* SearchStrategyData = nullptr;
 	//TSearchStrategy SearchStrategy = nullptr;
 	FOnSearch OnSearch;
 	FOnGenerated OnGenerated;
+	FOnInit OnInit;
 	FCriticalSection Mutex;
 
 	RunInstanceHandle runInstance;

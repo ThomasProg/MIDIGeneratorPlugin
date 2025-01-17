@@ -56,11 +56,23 @@ public:
 	TArray<int32> NewEncodedTokens;
 	bool bShouldUpdateTokens = false;
 	FCriticalSection EncodedTokensSection;
+	TArray<int32> DecodedTokens;
 
 	TSharedPtr<struct FMidiFileData> MidiFileData;
 	FMidiFileProxyPtr MidiDataProxy;
 
+	MidiConverterHandle converter = nullptr;
 	RangeGroupHandle CurrentRangeGroup = nullptr;
+
+	int32 CurrentTick = 0;
+	int32 AddedTicks = 0;
+	int32 nextTokenToProcess = 0;
+
+	RangeGroupHandle BaseRangeGroup;
+	RangeGroupHandle PitchRangeGroup;
+	RangeGroupHandle VelocityRangeGroup;
+	RangeGroupHandle DurationRangeGroup;
+	RangeGroupHandle AllRangeGroup;
 
 public:
 	~FMIDIGeneratorEnv();
@@ -70,6 +82,7 @@ public:
 	void PreStart(const FString& TokenizerPath, const FString& ModelPath, const TArray<int32>& InTokens);
 
 	void SetFilter();
+	void DecodeTokens();
 };
 
 
@@ -114,6 +127,9 @@ public:
 
 	UFUNCTION(BlueprintCallable)
 	void SetFilter();
+
+	UFUNCTION(BlueprintCallable)
+	void SetTokenizer(class UTokenizerAsset* InTokenizer);
 
 	//~Begin IAudioProxyDataFactory Interface.
 	virtual TSharedPtr<Audio::IProxyData> CreateProxyData(const Audio::FProxyDataInitParams& InitParams) override;
