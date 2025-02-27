@@ -119,7 +119,8 @@ private:
 
 	TArray<int32> EncodedTokens;
 	//int32 LineNbMaxToken = 256;
-	int32 LineNbMaxToken = 511;
+	int32 LineNbMaxToken = 512;
+	//int32 LineNbMaxToken = 1024;
 	int32 NbMaxTokensAhead = 50;
 
 	int32 NbBatchGen = 10;
@@ -128,6 +129,10 @@ private:
 
 	FRunnableThread* Thread;
 	bool bShutdown = false;
+
+
+
+	int32 NbTokensSinceLastRefresh = 0;
 
 	////~Begin IAudioProxyDataFactory Interface.
 	//virtual TSharedPtr<Audio::IProxyData> CreateProxyData(const Audio::FProxyDataInitParams& InitParams) override;

@@ -124,7 +124,9 @@ void FMIDIGeneratorEnv::SetFilter()
 	//}
 
 	//const FTokenizer& tok = GenThread->GetTok();
-	MidiTokenizerHandle tok = GenThread->GetTok().GetTokenizer();
+	const FTokenizer& tok2 = GenThread->GetTok();
+
+	MidiTokenizerHandle tok = tok2.GetTokenizer();
 
 	if (tok == nullptr)
 	{
@@ -136,9 +138,9 @@ void FMIDIGeneratorEnv::SetFilter()
 	tokenizer_addTokensStartingByPosition(tok, BaseRangeGroup);
 	tokenizer_addTokensStartingByBarNone(tok, BaseRangeGroup);
 
-	Range const* ranges;
-	size_t nbRanges;
-	rangeGroupGetRanges(BaseRangeGroup, &ranges, &nbRanges);
+	//Range const* ranges;
+	//size_t nbRanges;
+	//rangeGroupGetRanges(BaseRangeGroup, &ranges, &nbRanges);
 
 	//for (std::int32_t rangeIndex = 0; rangeIndex < nbRanges; rangeIndex++)
 	//{
@@ -164,7 +166,7 @@ void FMIDIGeneratorEnv::SetFilter()
 	//	}
 	//}
 
-	UE_LOG(LogTemp, Warning, TEXT("-------------------------"));
+	//UE_LOG(LogTemp, Warning, TEXT("-------------------------"));
 
 
 	PitchRangeGroup = cloneRangeGroup(BaseRangeGroup);
@@ -211,6 +213,11 @@ void FMIDIGeneratorEnv::SetFilter()
 				{
 					for (std::int32_t token = ranges[rangeIndex].min; token <= ranges[rangeIndex].max; token++)
 					{
+						//if (token >= args.vocabSize)
+						//{
+						//	break;
+						//}
+
 						float currentLogit = batchLogits[token];
 
 						//float added = 0.0;
@@ -382,7 +389,7 @@ void FMIDIGeneratorEnv::DecodeTokens()
 	Args args{ this };
 
 	if (converter == nullptr)
-		converter = createMidiConverter();
+		converter = createTSDConverter();
 
 	converterSetTokenizer(converter, GenThread->GetTok().GetTokenizer());
 
@@ -413,6 +420,7 @@ void FMIDIGeneratorEnv::DecodeTokens()
 
 				FMidiMsg Msg{ FMidiMsg::CreateNoteOn(Channel - 1, NoteNumber, Velocity) };
 				args.self->MidiFileData->Tracks[0].AddEvent(FMidiEvent(Tick, Msg));
+				args.self->MidiFileData->GetLastEventTick();
 			}
 
 		});
@@ -442,6 +450,10 @@ void FMIDIGeneratorEnv::DecodeTokens()
 		else
 		{
 			i++; // ignore current token and continue
+			if (i - nextTokenToProcess > 20)
+			{
+				i += 10; // in case there are too many errors, ignore the 10 next tokens
+			}
 		}
 	}
 }

@@ -1,7 +1,7 @@
 // Copyright Prog'z. All Rights Reserved.
 
-
 #include "GenThread.h"
+#include "utilities.hpp"
 
 FString FGenThread::RelativeToAbsoluteContentPath(const FString& BaseStr)
 {
@@ -67,11 +67,20 @@ bool FGenThread::Init()
 
 	env = createEnv(false);
 	generator = createMusicGenerator();
-	generator_loadOnnxModel(generator, env, TCHAR_TO_UTF8(*ModelPath));
-	//generator_setConfig(generator, 4, 256, 6);
+
+	generator_setNbAttentionHeads(generator, 12);
+	generator_setHiddenSize(generator, 768);
+	generator_setNbLayers(generator, 12);
+	generator_setNbMaxPositions(generator, 1024);
+	generator_setVocabSize(generator, 50257);
+
+	//generator_setNbAttentionHeads(generator, 4);
+	//generator_setHiddenSize(generator, 256);
+	//generator_setNbLayers(generator, 6);
+	//generator_setNbMaxPositions(generator, 256);
 	//generator_setVocabSize(generator, 30000);
-	generator_setConfig(generator, 4, 256, 6);
-	generator_setVocabSize(generator, 30000);
+
+	generator_loadOnnxModel(generator, env, TCHAR_TO_UTF8(*ModelPath));
 
 	runInstance = generator_createRunInstance(GetGen());
 	//runInstance = createRunInstance();
@@ -327,6 +336,8 @@ uint32 FGenThread::Run()
 		runInstance_setMaxInputLength(runInstance, LineNbMaxToken);
 	}
 
+	NbTokensSinceLastRefresh = EncodedTokens.Num();
+
 	while (!bShutdown)
 	{
 		SCOPE_CYCLE_COUNTER(STAT_GenThread);
@@ -347,6 +358,21 @@ uint32 FGenThread::Run()
 			}
 		}
 
+		if (NbTokensSinceLastRefresh >= LineNbMaxToken)
+		{
+			runInstance_reset(runInstance);
+
+			TArray<int32> Context;
+			int32 start = FMath::Max(0, EncodedTokens.Num() - LineNbMaxToken / 2);
+			for (int32 i = start; i < EncodedTokens.Num(); i++)
+			{
+				Context.Add(EncodedTokens[i]);
+			}
+
+			batch_set(batch, Context.GetData(), Context.Num(), start);
+			NbTokensSinceLastRefresh = 0;
+		}
+
 		//if (SearchStrategyData == nullptr || SearchStrategy == nullptr)
 		//{
 		//	continue;
@@ -360,15 +386,36 @@ uint32 FGenThread::Run()
 		}
 		Mutex.Unlock();
 
-		generator_preGenerate(GetGen(), runInstance);
-		const char* errorMsg;
-		bool success = generator_generate(GetGen(), runInstance, &errorMsg);
-		verify(success);
+		{
+			CppResult Res = generator_preGenerate(GetGen(), runInstance);
+			if (!Res.IsSuccess())
+			{
+				UE_LOG(LogTemp, Error, TEXT("An error occurred in function %s!\n%hs"), *FString(__FUNCTION__), Res.GetError());
+				return -1;
+			}
+		}
 
-		generator_postGenerate(GetGen(), runInstance);
+		{
+			CppResult Res = generator_generate(GetGen(), runInstance);
+			if (!Res.IsSuccess())
+			{
+				UE_LOG(LogTemp, Error, TEXT("An error occurred in function %s!\n%hs"), *FString(__FUNCTION__), Res.GetError());
+				return -1;
+			}
+		}
+
+		{
+			CppResult Res = generator_postGenerate(GetGen(), runInstance);
+			if (!Res.IsSuccess())
+			{
+				UE_LOG(LogTemp, Error, TEXT("An error occurred in function %s!\n%hs"), *FString(__FUNCTION__), Res.GetError());
+				return -1;
+			}
+		}
 
 		int32 newToken = batch_getLastGeneratedToken(batch);
 		EncodedTokens.Add(newToken);
+		NbTokensSinceLastRefresh++;
 
 
 		//TryInsertTokenGroup();

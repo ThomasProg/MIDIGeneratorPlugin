@@ -48,7 +48,7 @@ void FMidiConverter::update()
 
     Args args{ i, unplayedTokenIndex };
 
-    MidiConverterHandle converter = createMidiConverter();
+    MidiConverterHandle converter = createTSDConverter();
     converterSetOnNote(converter, [](void* data, const Note& newNote)
         {
             Args& args = *(Args*)(data);

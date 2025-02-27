@@ -74,6 +74,16 @@ public:
 		return isBarNone(Tokenizer, decodedToken);
 	}
 
+	int32 GetNbDecodedTokens() const
+	{
+		return tokenizer_getNbDecodedTokens(Tokenizer);
+	}
+	int32 GetNbEncodedTokens() const
+	{
+		return tokenizer_getNbEncodedTokens(Tokenizer);
+	}
+
+
 	const char* DecodedTokenToString(int32 decodedToken) const
 	{
 		return tokenizer_decodedTokenToString(Tokenizer, decodedToken);
