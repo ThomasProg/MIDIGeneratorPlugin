@@ -331,7 +331,7 @@ namespace Metasound
 		{
 			TryUpdateGenThreadInput();
 
-			if ((!Generator.IsValid()) || GetTok() == nullptr || GetGen() == nullptr)
+			if ((!Generator.IsValid()) || GetTok() == nullptr)
 			{
 				return;
 			}

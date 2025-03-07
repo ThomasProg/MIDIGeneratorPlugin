@@ -1,27 +1,23 @@
 #pragma once
 
-#include <cstdint>
+#include <stdint.h>
+#include "fwd.h"
 
-struct Note
+typedef struct Note
 {
-    std::int32_t tick;
-    std::int32_t duration;
-    std::int32_t pitch;
-    std::int32_t velocity;
-};
+    int32_t tick;
+    int32_t duration;
+    int32_t pitch;
+    int32_t velocity;
+} API_EXPORT Note;
 
-struct SearchArgs
+typedef struct SearchArgs
 {
     const float* logitsTensor;
-    std::int32_t* outNextTokens;
+    int32_t* outNextTokens;
     
-    std::int32_t nbBatches;
-    std::int32_t nbSequences;
-    std::int32_t vocabSize;
-};
+    int32_t nbBatches;
+    int32_t nbSequences;
+    int32_t vocabSize;
+} API_EXPORT SearchArgs;
 
-struct Range
-{
-    int32_t min;
-    int32_t max;
-};

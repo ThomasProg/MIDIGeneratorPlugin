@@ -2,6 +2,7 @@
 
 #include "GenThread.h"
 #include "utilities.hpp"
+#include "abstractPipeline.hpp"
 
 FString FGenThread::RelativeToAbsoluteContentPath(const FString& BaseStr)
 {
@@ -14,6 +15,11 @@ FString FGenThread::RelativeToAbsoluteContentPath(const FString& BaseStr)
 		FString FullPath = IFileManager::Get().ConvertToAbsolutePathForExternalAppForRead(*FPaths::ProjectContentDir());
 		return FullPath + BaseStr;
 	}
+}
+
+void FGenThread::SetPipeline(IAutoRegressivePipeline* NewPipeline)
+{
+	Pipeline = NewPipeline;
 }
 
 void FGenThread::PreStart(const FString& InTokenizerPath, const FString& InModelPath, const TArray<int32>& InTokens)
@@ -40,6 +46,11 @@ bool FGenThread::HasStarted() const
 	return Thread != nullptr;
 }
 
+void FGenThread::SetTokens(const TArray<int32>& InTokens)
+{
+	this->EncodedTokens = InTokens;
+}
+
 FGenThread::~FGenThread()
 {
 	if (Thread)
@@ -59,49 +70,68 @@ bool FGenThread::Init()
 	//}
 	//Generator.Init(TokenizerPath, ModelPath);
 
-	if (!Tokenizer.IsValid())
+	//if (!Tokenizer.IsValid())
+	//{
+	//	Tokenizer = MakeShared<FTokenizerProxy>((MidiTokenizerHandle)nullptr);
+	//}
+	//Tokenizer->GetTokenizer()->LoadIfInvalid(TokenizerPath);
+
+	if (Pipeline == nullptr)
 	{
-		Tokenizer = MakeShared<FTokenizerProxy>((MidiTokenizerHandle)nullptr);
+		env = createEnv(false);
+		generator = createMusicGenerator();
+
+		generator_setNbAttentionHeads(generator, 12);
+		generator_setHiddenSize(generator, 768);
+		generator_setNbLayers(generator, 12);
+		generator_setNbMaxPositions(generator, 1024);
+		generator_setVocabSize(generator, 50257);
+
+		//generator_setNbAttentionHeads(generator, 4);
+		//generator_setHiddenSize(generator, 256);
+		//generator_setNbLayers(generator, 6);
+		//generator_setNbMaxPositions(generator, 256);
+		//generator_setVocabSize(generator, 30000);
+
+		generator_loadOnnxModel(generator, env, TCHAR_TO_UTF8(*ModelPath));
+
+		runInstance = generator_createRunInstance(GetGen());
+
+
+		batch = createBatch();
+		runInstance_addBatch(runInstance, batch);
+		batch_set(batch, EncodedTokens.GetData(), EncodedTokens.Num(), 0);
+
+		runInstance_setSearchStrategyData(runInstance, this);
+		runInstance_setSearchStrategy(runInstance, [](const struct SearchArgs& args, void* searchStrategyData)
+			{
+				FGenThread* GenThread = (FGenThread*)searchStrategyData;
+				GenThread->Mutex.Lock();
+				FOnSearch OnSearch = GenThread->OnSearch;
+				//void* SearchStrategyData = GenThread->SearchStrategyData;
+				//TSearchStrategy SearchStrategy = GenThread->SearchStrategy;
+				GenThread->Mutex.Unlock();
+
+				OnSearch.Execute(args);
+
+				//(*SearchStrategy)(args, SearchStrategyData);
+			});
 	}
-	Tokenizer->GetTokenizer()->LoadIfInvalid(TokenizerPath);
-
-	env = createEnv(false);
-	generator = createMusicGenerator();
-
-	generator_setNbAttentionHeads(generator, 12);
-	generator_setHiddenSize(generator, 768);
-	generator_setNbLayers(generator, 12);
-	generator_setNbMaxPositions(generator, 1024);
-	generator_setVocabSize(generator, 50257);
-
-	//generator_setNbAttentionHeads(generator, 4);
-	//generator_setHiddenSize(generator, 256);
-	//generator_setNbLayers(generator, 6);
-	//generator_setNbMaxPositions(generator, 256);
-	//generator_setVocabSize(generator, 30000);
-
-	generator_loadOnnxModel(generator, env, TCHAR_TO_UTF8(*ModelPath));
-
-	runInstance = generator_createRunInstance(GetGen());
-	//runInstance = createRunInstance();
-	batch = createBatch();
-	runInstance_addBatch(runInstance, batch);
-	batch_set(batch, EncodedTokens.GetData(), EncodedTokens.Num(), 0);
-
-	runInstance_setSearchStrategyData(runInstance, this);
-	runInstance_setSearchStrategy(runInstance, [](const struct SearchArgs& args, void* searchStrategyData)
+	else
 	{
-		FGenThread* GenThread = (FGenThread*)searchStrategyData;
-		GenThread->Mutex.Lock();
-		FOnSearch OnSearch = GenThread->OnSearch;
-		//void* SearchStrategyData = GenThread->SearchStrategyData;
-		//TSearchStrategy SearchStrategy = GenThread->SearchStrategy;
-		GenThread->Mutex.Unlock();
+		Batch2 = Pipeline->addBatch();
+		Pipeline->batchSet(Batch2, EncodedTokens.GetData(), EncodedTokens.Num(), 0);
+		Pipeline->setSearchStrategyData(this);
+		Pipeline->setSearchStrategy([](const struct SearchArgs& args, void* searchStrategyData)
+			{
+				FGenThread* GenThread = (FGenThread*)searchStrategyData;
+				GenThread->Mutex.Lock();
+				FOnSearch OnSearch = GenThread->OnSearch;
+				GenThread->Mutex.Unlock();
+				OnSearch.Execute(args);
+			});
+	}
 
-		OnSearch.Execute(args);
-
-		//(*SearchStrategy)(args, SearchStrategyData);
-	});
 
 	OnInit.ExecuteIfBound();
 
@@ -331,9 +361,16 @@ uint32 FGenThread::Run()
 			Context.Add(EncodedTokens[i]);
 		}
 
-		batch_set(batch, Context.GetData(), Context.Num(), start);
-
-		runInstance_setMaxInputLength(runInstance, LineNbMaxToken);
+		if (Pipeline != nullptr)
+		{
+			Pipeline->batchSet(Batch2, Context.GetData(), Context.Num(), start);
+			Pipeline->setMaxInputLength(LineNbMaxToken);
+		}
+		else
+		{
+			batch_set(batch, Context.GetData(), Context.Num(), start);
+			runInstance_setMaxInputLength(runInstance, LineNbMaxToken);
+		}
 	}
 
 	NbTokensSinceLastRefresh = EncodedTokens.Num();
@@ -344,7 +381,14 @@ uint32 FGenThread::Run()
 
 		if (forceReupdate)
 		{
-			runInstance_reset(runInstance);
+			if (Pipeline != nullptr)
+			{
+				Pipeline->reset();
+			}
+			else
+			{
+				runInstance_reset(runInstance);
+			}
 
 			{
 				TArray<int32> Context;
@@ -354,13 +398,27 @@ uint32 FGenThread::Run()
 					Context.Add(EncodedTokens[i]);
 				}
 
-				batch_set(batch, Context.GetData(), Context.Num(), start);
+				if (Pipeline != nullptr)
+				{
+					Pipeline->batchSet(Batch2, Context.GetData(), Context.Num(), start);
+				}
+				else
+				{
+					batch_set(batch, Context.GetData(), Context.Num(), start);
+				}
 			}
 		}
 
 		if (NbTokensSinceLastRefresh >= LineNbMaxToken)
 		{
-			runInstance_reset(runInstance);
+			if (Pipeline != nullptr)
+			{
+				Pipeline->reset();
+			}
+			else
+			{
+				runInstance_reset(runInstance);
+			}
 
 			TArray<int32> Context;
 			int32 start = FMath::Max(0, EncodedTokens.Num() - LineNbMaxToken / 2);
@@ -369,7 +427,14 @@ uint32 FGenThread::Run()
 				Context.Add(EncodedTokens[i]);
 			}
 
-			batch_set(batch, Context.GetData(), Context.Num(), start);
+			if (Pipeline != nullptr)
+			{
+				Pipeline->batchSet(Batch2, Context.GetData(), Context.Num(), start);
+			}
+			else
+			{
+				batch_set(batch, Context.GetData(), Context.Num(), start);
+			}
 			NbTokensSinceLastRefresh = 0;
 		}
 
@@ -386,34 +451,69 @@ uint32 FGenThread::Run()
 		}
 		Mutex.Unlock();
 
+		if (Pipeline != nullptr)
 		{
-			CppResult Res = generator_preGenerate(GetGen(), runInstance);
-			if (!Res.IsSuccess())
+			CppResult Result;
+			Pipeline->preGenerate(Result);
+			if (!Result.IsSuccess())
 			{
-				UE_LOG(LogTemp, Error, TEXT("An error occurred in function %s!\n%hs"), *FString(__FUNCTION__), Res.GetError());
+				UE_LOG(LogTemp, Error, TEXT("An error occurred in function %s!\n%hs"), *FString(__FUNCTION__), Result.GetError());
+				return -1;
+			}
+
+			Pipeline->generate(Result);
+			if (!Result.IsSuccess())
+			{
+				UE_LOG(LogTemp, Error, TEXT("An error occurred in function %s!\n%hs"), *FString(__FUNCTION__), Result.GetError());
+				return -1;
+			}
+
+			Pipeline->postGenerate(Result);
+			if (!Result.IsSuccess())
+			{
+				UE_LOG(LogTemp, Error, TEXT("An error occurred in function %s!\n%hs"), *FString(__FUNCTION__), Result.GetError());
 				return -1;
 			}
 		}
-
+		else
 		{
-			CppResult Res = generator_generate(GetGen(), runInstance);
-			if (!Res.IsSuccess())
 			{
-				UE_LOG(LogTemp, Error, TEXT("An error occurred in function %s!\n%hs"), *FString(__FUNCTION__), Res.GetError());
-				return -1;
+				CppResult Res = generator_preGenerate(GetGen(), runInstance);
+				if (!Res.IsSuccess())
+				{
+					UE_LOG(LogTemp, Error, TEXT("An error occurred in function %s!\n%hs"), *FString(__FUNCTION__), Res.GetError());
+					return -1;
+				}
+			}
+
+			{
+				CppResult Res = generator_generate(GetGen(), runInstance);
+				if (!Res.IsSuccess())
+				{
+					UE_LOG(LogTemp, Error, TEXT("An error occurred in function %s!\n%hs"), *FString(__FUNCTION__), Res.GetError());
+					return -1;
+				}
+			}
+
+			{
+				CppResult Res = generator_postGenerate(GetGen(), runInstance);
+				if (!Res.IsSuccess())
+				{
+					UE_LOG(LogTemp, Error, TEXT("An error occurred in function %s!\n%hs"), *FString(__FUNCTION__), Res.GetError());
+					return -1;
+				}
 			}
 		}
 
+		int32 newToken;
+		if (Pipeline != nullptr)
 		{
-			CppResult Res = generator_postGenerate(GetGen(), runInstance);
-			if (!Res.IsSuccess())
-			{
-				UE_LOG(LogTemp, Error, TEXT("An error occurred in function %s!\n%hs"), *FString(__FUNCTION__), Res.GetError());
-				return -1;
-			}
+			newToken = Pipeline->batchGetLastGeneratedToken(Batch2);
 		}
-
-		int32 newToken = batch_getLastGeneratedToken(batch);
+		else
+		{
+			newToken = batch_getLastGeneratedToken(batch);
+		}
 		EncodedTokens.Add(newToken);
 		NbTokensSinceLastRefresh++;
 
@@ -433,14 +533,23 @@ uint32 FGenThread::Run()
 
 void FGenThread::Exit() 
 {
-	runInstance_removeBatch(runInstance, batch);
-	destroyBatch(batch);
-	destroyRunInstance(runInstance);
+	if (Pipeline == nullptr)
+	{
+		runInstance_removeBatch(runInstance, batch);
+		destroyBatch(batch);
+		destroyRunInstance(runInstance);
+	}
 
-	//Generator.Deinit();
-	destroyMusicGenerator(generator);
-	//destroyMidiTokenizer(tok);
-	destroyEnv(env);
+	if (generator != nullptr)
+	{
+		destroyMusicGenerator(generator);
+	}
+	
+	if (env != nullptr)
+	{
+		destroyEnv(env);
+	}
+
 }
 
 void FGenThread::Stop() 

@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "MIDIGenerator.h"
 #include "TokenizerAsset.h"
+#include "fwd.h"
 
 DECLARE_CYCLE_STAT(TEXT("GenThread"), STAT_GenThread, STATGROUP_Game);
 
@@ -45,10 +46,13 @@ class MIDIGENERATORWRAPPER_API FGenThread : public FRunnable//, public IAudioPro
 {
 public:
 	//FGenThread(const FString& TokenizerPath, const FString& ModelPath);
+	void SetPipeline(IAutoRegressivePipeline* NewPipeline);
 	void PreStart(const FString& TokenizerPath, const FString& ModelPath, const TArray<int32>& InTokens);
 	void Start(const FString& TokenizerPath, const FString& ModelPath, const TArray<int32>& InTokens);
 	void Start();
 	bool HasStarted() const;
+
+	void SetTokens(const TArray<int32>& InTokens);
 
 	~FGenThread();
 
@@ -98,12 +102,12 @@ protected:
 	// END FRunnable
 
 private:
+	IAutoRegressivePipeline* Pipeline = nullptr;
 	EnvHandle env;
 	MusicGeneratorHandle generator;
 
 	FString TokenizerPath; 
 	FString ModelPath;
-	//FMIDIGenerator Generator;
 
 	FTokenizerProxyPtr Tokenizer;
 
@@ -116,11 +120,12 @@ private:
 
 	RunInstanceHandle runInstance;
 	BatchHandle batch;
+	AutoRegressiveBatchHandle Batch2;
 
 	TArray<int32> EncodedTokens;
 	//int32 LineNbMaxToken = 256;
-	int32 LineNbMaxToken = 512;
-	//int32 LineNbMaxToken = 1024;
+	//int32 LineNbMaxToken = 512;
+	int32 LineNbMaxToken = 1024;
 	int32 NbMaxTokensAhead = 50;
 
 	int32 NbBatchGen = 10;

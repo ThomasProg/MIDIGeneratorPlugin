@@ -15,3 +15,16 @@ TSharedPtr<Audio::IProxyData> UTokenizerAsset::CreateProxyData(const Audio::FPro
 {
 	return MakeShared<FTokenizerProxy, ESPMode::ThreadSafe>(this);
 }
+
+void UTokenizerAsset::TryLoadTokenizer()
+{
+	if (!TokenizerPath.IsEmpty())
+	{
+		FString FullPath = FGenThread::RelativeToAbsoluteContentPath(TokenizerPath);
+		MidiTokenizerHandle Tok = createMidiTokenizer(TCHAR_TO_UTF8(*FullPath));
+		if (Tok)
+		{
+			Tokenizer = MakeShared<FTokenizerProxy>(Tok);
+		}
+	}
+}

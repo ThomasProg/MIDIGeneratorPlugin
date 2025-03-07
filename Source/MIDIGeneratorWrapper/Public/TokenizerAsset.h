@@ -127,17 +127,7 @@ protected:
 
 public:
 	UFUNCTION(BlueprintCallable)
-	void TryLoadTokenizer()
-	{
-		if (!TokenizerPath.IsEmpty())
-		{
-			MidiTokenizerHandle Tok = createMidiTokenizer(TCHAR_TO_UTF8(*TokenizerPath));
-			if (Tok)
-			{
-				Tokenizer = MakeShared<FTokenizerProxy>(Tok);
-			}
-		}
-	}
+	void TryLoadTokenizer();
 
 	UFUNCTION(BlueprintCallable)
 	void TryLoadTokenizerFromPath(const FString& InTokenizerPath)

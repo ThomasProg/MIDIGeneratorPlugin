@@ -33,6 +33,7 @@ public:
 	TSharedPtr<FMIDIGeneratorEnv> MidiGenerator;
 };
 
+// Pipeline
 struct MIDIGENERATORWRAPPER_API FMIDIGeneratorEnv
 {
 public:
@@ -79,7 +80,11 @@ public:
 	void StartGeneration();
 	void StopGeneration();
 
+	// @TODO : remove
+	// should be initialized with a TokenizerAsset and a ModelAsset instead
 	void PreStart(const FString& TokenizerPath, const FString& ModelPath, const TArray<int32>& InTokens);
+	void PreloadPipeline(const FString& ModelPath);
+	void SetTokens(const TArray<int32>& InTokens);
 
 	void SetFilter();
 	void DecodeTokens();
@@ -126,10 +131,16 @@ public:
 	void PreStart(const FString& TokenizerPath, const FString& ModelPath, const TArray<int32>& InTokens);
 
 	UFUNCTION(BlueprintCallable)
+	void PreloadPipeline(const FString& ModelPath);
+
+	UFUNCTION(BlueprintCallable)
 	void SetFilter();
 
 	UFUNCTION(BlueprintCallable)
 	void SetTokenizer(class UTokenizerAsset* InTokenizer);
+
+	UFUNCTION(BlueprintCallable)
+	void SetTokens(const TArray<int32>& InTokens);
 
 	//~Begin IAudioProxyDataFactory Interface.
 	virtual TSharedPtr<Audio::IProxyData> CreateProxyData(const Audio::FProxyDataInitParams& InitParams) override;

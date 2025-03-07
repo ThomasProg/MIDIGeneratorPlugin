@@ -3,11 +3,17 @@
 #include "fwd.h"
 #include "note.h"
 #include "utilities.h"
+#include "range.h"
+#include <cstdint>
 
+#ifdef __cplusplus
 extern "C"
 {
+#endif
     API_EXPORT std::int64_t computeMultiDimIndex(std::int64_t* shape, std::int64_t* indices);
+#ifdef __cplusplus
 }
+#endif
 
 // Env
 extern "C" 
@@ -22,7 +28,7 @@ extern "C"
     API_EXPORT MusicGeneratorHandle createMusicGenerator();
     API_EXPORT void destroyMusicGenerator(MusicGeneratorHandle musicGen);
 
-    API_EXPORT void generator_loadOnnxModel(MusicGeneratorHandle generator, EnvHandle env, const char* path);
+    API_EXPORT CResult generator_loadOnnxModel(MusicGeneratorHandle generator, EnvHandle env, const char* path);
     API_EXPORT void generator_generateNextToken(MusicGeneratorHandle generator, RunInstanceHandle runInstance);
 
     API_EXPORT CResult generator_preGenerate(MusicGeneratorHandle generator, RunInstanceHandle runInstance);

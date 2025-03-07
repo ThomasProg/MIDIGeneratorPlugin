@@ -6,6 +6,9 @@
 #include "HarmonixMetasound/DataTypes/MidiClock.h"
 #include "HarmonixMetasound/DataTypes/MusicTimeInterval.h"
 
+#include "modelBuilderManager.hpp"
+#include "abstractPipeline.hpp"
+
 FMIDIGeneratorProxy::FMIDIGeneratorProxy(UMIDIGeneratorEnv* InGeneratorEnv)
 {
 	if (InGeneratorEnv && InGeneratorEnv->Generator)
@@ -33,6 +36,37 @@ FMIDIGeneratorEnv::~FMIDIGeneratorEnv()
 void FMIDIGeneratorEnv::PreStart(const FString& TokenizerPath, const FString& ModelPath, const TArray<int32>& InTokens)
 {
 	GenThread->PreStart(TokenizerPath, ModelPath, InTokens);
+}
+
+void FMIDIGeneratorEnv::PreloadPipeline(const FString& ModelPath)
+{
+	const char* Path = TCHAR_TO_UTF8(*GenThread->RelativeToAbsoluteContentPath(ModelPath));
+
+	EnvHandle env = createEnv(false);
+
+	ModelLoadingParamsWrapper params;
+	CResult r = createModelLoadingParamsWrapperFromFolder(Path, &params);
+	if (!ResultIsSuccess(&r))
+	{
+		verify(false); // couldn't load file
+		return;
+	}
+
+	//CStr ModelType = modelLoadingParams_getModelType(&params);
+	CppStr ModelType = params.getModelType();
+	OnnxModelBuilder* Builder = getModelBuilderManager().findBuilder<OnnxModelBuilder>(ModelType.Str());
+	Builder->env = env;
+
+	AModel* Model = Builder->loadModelFromWrapper(params);
+	IPipeline* Pipeline = Model->createPipeline();
+	IAutoRegressivePipeline* ARPipeline = (IAutoRegressivePipeline*)Pipeline; // @TODO : dynamic cast
+
+	GenThread->SetPipeline(ARPipeline);
+}
+
+void FMIDIGeneratorEnv::SetTokens(const TArray<int32>& InTokens)
+{
+	GenThread->SetTokens(InTokens);
 }
 
 void FMIDIGeneratorEnv::StartGeneration()
@@ -478,6 +512,11 @@ void UMIDIGeneratorEnv::PreStart(const FString& TokenizerPath, const FString& Mo
 	Generator->MidiGenerator->PreStart(TokenizerPath, ModelPath, InTokens);
 }
 
+void UMIDIGeneratorEnv::PreloadPipeline(const FString& ModelPath)
+{
+	Generator->MidiGenerator->PreloadPipeline(ModelPath);
+}
+
 void UMIDIGeneratorEnv::SetFilter()
 {
 	Generator->MidiGenerator->SetFilter();
@@ -486,6 +525,11 @@ void UMIDIGeneratorEnv::SetFilter()
 void UMIDIGeneratorEnv::SetTokenizer(UTokenizerAsset* InTokenizer)
 {
 	Generator->MidiGenerator->GenThread->SetTok(InTokenizer->GetTokenizerPtr());
+}
+
+void UMIDIGeneratorEnv::SetTokens(const TArray<int32>& InTokens)
+{
+	Generator->MidiGenerator->SetTokens(InTokens);
 }
 
 TSharedPtr<Audio::IProxyData> UMIDIGeneratorEnv::CreateProxyData(const Audio::FProxyDataInitParams& InitParams)
