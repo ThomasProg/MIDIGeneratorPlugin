@@ -130,6 +130,8 @@ bool FGenThread::Init()
 				GenThread->Mutex.Unlock();
 				OnSearch.Execute(args);
 			});
+
+		Pipeline->createHistory(*Tokenizer->GetTokenizer()->GetTokenizer());
 	}
 
 

@@ -63,4 +63,8 @@ public:
     virtual void batchSet(AutoRegressiveBatchHandle batch, DataType* inputTokens, std::int32_t nbTokens, std::int32_t fromPos) = 0;
 
     virtual void setMaxInputLength(int32_t newMaxInputLength) = 0;
+    
+    // Owned by the pipeline, no need to destroy
+    virtual void createHistory(const MidiTokenizer& tokenizer) = 0;
+    virtual class GenerationHistory* getHistory(AutoRegressiveBatchHandle batchHandle) const = 0;
 };

@@ -47,6 +47,7 @@ class IAutoRegressivePipeline;
 class AModel;
 class ModelLoader;
 class ModelLoadingParamsWrapper;
+class GenerationHistory;
 
 using EnvHandle = Ort::Env*;
 using MidiTokenizerHandle = MidiTokenizer*;

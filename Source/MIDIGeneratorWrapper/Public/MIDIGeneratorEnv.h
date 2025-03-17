@@ -68,6 +68,7 @@ public:
 	int32 CurrentTick = 0;
 	int32 AddedTicks = 0;
 	int32 nextTokenToProcess = 0;
+	int32 nbSkips = 0;
 
 	RangeGroupHandle BaseRangeGroup;
 	RangeGroupHandle PitchRangeGroup;

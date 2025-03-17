@@ -83,6 +83,26 @@ public:
 		return tokenizer_getNbEncodedTokens(Tokenizer);
 	}
 
+	bool UseVelocities() const
+	{
+		return tokenizer_useVelocities(Tokenizer);
+	}
+
+	bool UseDuration() const
+	{
+		return tokenizer_useDuration(Tokenizer);
+	}
+
+	bool UseTimeSignatures() const
+	{
+		return tokenizer_useTimeSignatures(Tokenizer);
+	}
+
+	const char* GetTokenizationType() const
+	{
+		return tokenizer_getTokenizationType(Tokenizer);
+	}
+
 
 	const char* DecodedTokenToString(int32 decodedToken) const
 	{

@@ -103,7 +103,7 @@ extern "C"
     API_EXPORT void redirector_bindPitch(RedirectorHandle redirector, const MidiTokenizerHandle tokenizer, const char* prefix, void* data, void(*callback)(void*, std::uint8_t pitch));
     API_EXPORT bool redirector_call(RedirectorHandle redirector, std::int32_t token);
 
-    API_EXPORT void tokenizer_decodeIDs(MidiTokenizerHandle tokenizer, const std::int32_t* inputIDs, std::int32_t size, std::int32_t** outputIDs, std::int32_t* outSize);
+    API_EXPORT CResult tokenizer_decodeIDs(MidiTokenizerHandle tokenizer, const std::int32_t* inputIDs, std::int32_t size, std::int32_t** outputIDs, std::int32_t* outSize);
     API_EXPORT void tokenizer_decodeIDs_free(std::int32_t* outputIDs);
 
     API_EXPORT void tokenizer_decodeToken(MidiTokenizerHandle tokenizer, std::int32_t encodedToken, std::int32_t** outDecodedTokens, std::int32_t* outNbDecodedTokens);
@@ -120,6 +120,11 @@ extern "C"
 
     API_EXPORT std::int32_t tokenizer_getNbEncodedTokens(MidiTokenizerHandle tokenizer);
     API_EXPORT std::int32_t tokenizer_getNbDecodedTokens(MidiTokenizerHandle tokenizer);
+
+    API_EXPORT bool tokenizer_useVelocities(MidiTokenizerHandle tokenizer);
+    API_EXPORT bool tokenizer_useDuration(MidiTokenizerHandle tokenizer);
+    API_EXPORT bool tokenizer_useTimeSignatures(MidiTokenizerHandle tokenizer);
+    API_EXPORT const char* tokenizer_getTokenizationType(MidiTokenizerHandle tokenizer);
 }
 
 

@@ -13,7 +13,7 @@ typedef struct Note
 
 typedef struct SearchArgs
 {
-    const float* logitsTensor;
+    float* logitsTensor;
     int32_t* outNextTokens;
     
     int32_t nbBatches;

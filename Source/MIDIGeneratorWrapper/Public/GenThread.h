@@ -47,6 +47,8 @@ class MIDIGENERATORWRAPPER_API FGenThread : public FRunnable//, public IAudioPro
 public:
 	//FGenThread(const FString& TokenizerPath, const FString& ModelPath);
 	void SetPipeline(IAutoRegressivePipeline* NewPipeline);
+	IAutoRegressivePipeline* GetPipeline() const { return Pipeline; }
+	AutoRegressiveBatchHandle GetBatch() const { return Batch2; }
 	void PreStart(const FString& TokenizerPath, const FString& ModelPath, const TArray<int32>& InTokens);
 	void Start(const FString& TokenizerPath, const FString& ModelPath, const TArray<int32>& InTokens);
 	void Start();

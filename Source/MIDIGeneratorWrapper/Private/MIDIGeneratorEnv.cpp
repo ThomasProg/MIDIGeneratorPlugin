@@ -8,6 +8,8 @@
 
 #include "modelBuilderManager.hpp"
 #include "abstractPipeline.hpp"
+#include "logitProcessing.h"
+#include "logitProcessing.hpp"
 
 FMIDIGeneratorProxy::FMIDIGeneratorProxy(UMIDIGeneratorEnv* InGeneratorEnv)
 {
@@ -98,6 +100,12 @@ void FMIDIGeneratorEnv::StartGeneration()
 			int32 newDecodedTokensSize = 0;
 			tokenizer_decodeToken(GenThread->GetTok().GetTokenizer(), NewToken, &newDecodedTokens, &newDecodedTokensSize);
 
+			if (newDecodedTokensSize == 0)
+			{
+				EncodedTokensSection.Unlock();
+				return;
+			}
+
 			//UE_LOG(LogTemp, Warning, TEXT("---"), NewToken);
 			for (int32 i = 0; i < newDecodedTokensSize; i++)
 			{
@@ -105,27 +113,52 @@ void FMIDIGeneratorEnv::StartGeneration()
 				//UE_LOG(LogTemp, Warning, TEXT("%s"), ANSI_TO_TCHAR(str));
 			}
 
+			const FTokenizer& Tok = GenThread->GetTok();
+
 			//UE_LOG(LogTemp, Warning, TEXT("Pitch : %d"), NewToken);
 			int32 LastToken = newDecodedTokens[newDecodedTokensSize - 1];
-			if (GenThread->GetTok().IsPitch(LastToken))
+
+			int32 noteSequenceIndex = 0;
+			TArray<RangeGroupHandle> rangeGroups;
+			rangeGroups.Add(PitchRangeGroup);
+			if (Tok.UseVelocities())
+				rangeGroups.Add(VelocityRangeGroup);
+			if (Tok.UseDuration())
+				rangeGroups.Add(DurationRangeGroup);
+
+			if (noteSequenceIndex == 0)
 			{
-				//UE_LOG(LogTemp, Warning, TEXT("Last Is Pitch"));
-				//CurrentRangeGroup = VelocityRangeGroup;
-				//UE_LOG(LogTemp, Warning, TEXT("VelocityGroup"));
+				if (Tok.IsPitch(LastToken))
+				{
+					++noteSequenceIndex;
+					CurrentRangeGroup = VelocityRangeGroup;
+				}
 			}
-			else if (GenThread->GetTok().IsVelocity(LastToken))
-			{
-				//UE_LOG(LogTemp, Warning, TEXT("Last Is Velocity"));
-				//CurrentRangeGroup = DurationRangeGroup;
-				//UE_LOG(LogTemp, Warning, TEXT("DurationGroup"));
-			}
-			//else if (GenThread->GetTok().IsDuration(LastToken))
 			else
 			{
-				//UE_LOG(LogTemp, Warning, TEXT("Last Is Other"));
-				//CurrentRangeGroup = PitchRangeGroup;
-				//UE_LOG(LogTemp, Warning, TEXT("PitchGroup"));
+				++noteSequenceIndex;
 			}
+			noteSequenceIndex = noteSequenceIndex % rangeGroups.Num();
+			CurrentRangeGroup = rangeGroups[noteSequenceIndex];
+
+			//if (Tok.IsPitch(LastToken))
+			//{
+			//	//UE_LOG(LogTemp, Warning, TEXT("Last Is Pitch"));
+			//	CurrentRangeGroup = VelocityRangeGroup;
+			//	//UE_LOG(LogTemp, Warning, TEXT("VelocityGroup"));
+			//}
+			//else if (Tok.IsVelocity(LastToken))
+			//{
+			//	//UE_LOG(LogTemp, Warning, TEXT("Last Is Velocity"));
+			//	CurrentRangeGroup = DurationRangeGroup;
+			//	//UE_LOG(LogTemp, Warning, TEXT("DurationGroup"));
+			//}
+			//else if (Tok.IsDuration(LastToken))
+			//{
+			//	//UE_LOG(LogTemp, Warning, TEXT("Last Is Other"));
+			//	CurrentRangeGroup = PitchRangeGroup;
+			//	//UE_LOG(LogTemp, Warning, TEXT("PitchGroup"));
+			//}
 
 			tokenizer_decodeToken_free(newDecodedTokens);
 
@@ -229,64 +262,105 @@ void FMIDIGeneratorEnv::SetFilter()
 		{
 			//MidiTokenizerHandle tok = GenThread->GetTok();
 
-			Range const * ranges;
+			const Range* ranges;
 			size_t nbRanges;
 			rangeGroupGetRanges(CurrentRangeGroup, &ranges, &nbRanges);
 
-			check(args.nbBatches == 1);
-			// Get the last token's logits for each sequence in the batch
-			for (std::int32_t b = 0; b < args.nbBatches; ++b)
+			//temperatureTransform(&args, ranges, nbRanges);
+			//repetitionPenalty(&args, ranges, nbRanges);
+			args.logitsTensor[0] = -10000000;
+
+			//float temperature = 1.1;
+			//temperatureTransform(args.logitsTensor, ranges, nbRanges, temperature);
+
+			float repetitionPenalty = 1.1;
+			IAutoRegressivePipeline* Pipeline = GenThread->GetPipeline();
+			GenerationHistory* History = Pipeline->getHistory(GenThread->GetBatch());
+			//repetitionPenaltyTransform(args.logitsTensor, ranges, nbRanges, repetitionPenalty, History, 100);
+
 			{
-				// Start of the batch
-				const float* batchLogits = args.logitsTensor + (b * args.nbSequences + (args.nbSequences - 1)) * args.vocabSize;
-
-				// Find the index with the maximum logit
-				float maxLogit = -FLT_MAX;
-				std::int32_t max_index = 0;
-				for (std::int32_t rangeIndex = 0; rangeIndex < nbRanges; rangeIndex++)
-				{
-					for (std::int32_t token = ranges[rangeIndex].min; token <= ranges[rangeIndex].max; token++)
-					{
-						//if (token >= args.vocabSize)
-						//{
-						//	break;
-						//}
-
-						float currentLogit = batchLogits[token];
-
-						//float added = 0.0;
-
-						//std::int32_t* decodedTokens = nullptr;
-						//std::int32_t nbDecodedTokens = 0;
-						//// @TODO : thread safe
-						//tokenizer_decodeToken(tok, token, &decodedTokens, &nbDecodedTokens);
-
-						//for (std::int32_t i = 0; i < nbDecodedTokens; i++)
-						//{
-						//	std::int32_t decodedToken = decodedTokens[i];
-						//	if (isPitch(tok, decodedToken))
-						//	{
-						//		std::int32_t pitch = getPitch(tok, decodedToken);
-						//		if (pitch > 80)
-						//		{
-						//			//added -= 0.5;
-						//			break;
-						//		}
-						//	}
-						//}
-
-						//if (decodedTokens != nullptr)
-						//	tokenizer_decodeIDs_free(decodedTokens);
-
-						if (batchLogits[token] > maxLogit)
-						{
-							maxLogit = batchLogits[token];
-							max_index = token;
-						}
-					}
-				}
-				args.outNextTokens[b] = max_index;
+				SpecialPenaltyTransformArgs sArgs;
+				sArgs.pitchWindowSize = 20;
+				sArgs.pitchMaxAdditivePenalty = 0.05;
+				specialPenaltyTransform(args.logitsTensor, ranges, nbRanges, History, &sArgs);
 			}
+
+			musicalScalePenaltyTransform(args.logitsTensor, ranges, nbRanges, Scales::Ionian::CMajor::get(), Scales::Ionian::CMajor::size(), 0.05, GenThread->GetTok().GetTokenizer());
+
+			pitchRangePenaltyTransform(args.logitsTensor, ranges, nbRanges, 40, 80, 0.05, GenThread->GetTok().GetTokenizer());
+
+			check(args.nbBatches == 1);
+			int nbTopTokenSize = 40;
+			size_t CurrentRangeGroupSize = rangeGroupSize(CurrentRangeGroup);
+			int32* LogitIndices = new int32[CurrentRangeGroupSize];
+			rangeGroupWrite(CurrentRangeGroup, LogitIndices);
+			check(CurrentRangeGroupSize >= nbTopTokenSize);
+			sortLogits(args.logitsTensor, LogitIndices, LogitIndices + CurrentRangeGroupSize, nbTopTokenSize);
+
+			stableSoftmax(args.logitsTensor, LogitIndices, LogitIndices+nbTopTokenSize);
+
+
+			int outToken = topPSampling(args.logitsTensor, LogitIndices, LogitIndices + nbTopTokenSize, 0.5);
+			args.outNextTokens[0] = outToken;
+
+
+
+
+
+			//check(args.nbBatches == 1);
+			//// Get the last token's logits for each sequence in the batch
+			//for (std::int32_t b = 0; b < args.nbBatches; ++b)
+			//{
+			//	// Start of the batch
+			//	const float* batchLogits = args.logitsTensor + (b * args.nbSequences + (args.nbSequences - 1)) * args.vocabSize;
+
+			//	// Find the index with the maximum logit
+			//	float maxLogit = -FLT_MAX;
+			//	std::int32_t max_index = 0;
+			//	for (std::int32_t rangeIndex = 0; rangeIndex < nbRanges; rangeIndex++)
+			//	{
+			//		for (std::int32_t token = ranges[rangeIndex].min; token <= ranges[rangeIndex].max; token++)
+			//		{
+			//			//if (token >= args.vocabSize)
+			//			//{
+			//			//	break;
+			//			//}
+
+			//			float currentLogit = batchLogits[token];
+
+			//			//float added = 0.0;
+
+			//			//std::int32_t* decodedTokens = nullptr;
+			//			//std::int32_t nbDecodedTokens = 0;
+			//			//// @TODO : thread safe
+			//			//tokenizer_decodeToken(tok, token, &decodedTokens, &nbDecodedTokens);
+
+			//			//for (std::int32_t i = 0; i < nbDecodedTokens; i++)
+			//			//{
+			//			//	std::int32_t decodedToken = decodedTokens[i];
+			//			//	if (isPitch(tok, decodedToken))
+			//			//	{
+			//			//		std::int32_t pitch = getPitch(tok, decodedToken);
+			//			//		if (pitch > 80)
+			//			//		{
+			//			//			//added -= 0.5;
+			//			//			break;
+			//			//		}
+			//			//	}
+			//			//}
+
+			//			//if (decodedTokens != nullptr)
+			//			//	tokenizer_decodeIDs_free(decodedTokens);
+
+			//			if (batchLogits[token] > maxLogit)
+			//			{
+			//				maxLogit = batchLogits[token];
+			//				max_index = token;
+			//			}
+			//		}
+			//	}
+			//	args.outNextTokens[b] = max_index;
+			//}
 		}));
 
 
@@ -487,6 +561,8 @@ void FMIDIGeneratorEnv::DecodeTokens()
 			if (i - nextTokenToProcess > 20)
 			{
 				i += 10; // in case there are too many errors, ignore the 10 next tokens
+				nbSkips++;
+				UE_LOG(LogTemp, Warning, TEXT("Skips: %d"), nbSkips);
 			}
 		}
 	}
