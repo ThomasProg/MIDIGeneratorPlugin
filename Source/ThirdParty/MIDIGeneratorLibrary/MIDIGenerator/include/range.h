@@ -12,7 +12,8 @@ typedef struct
 extern "C"
 {
 API_EXPORT bool isColliding(const Range* a, const Range* b);
-API_EXPORT bool rangeSize(const Range* a);
+API_EXPORT uint32_t rangeSize(const Range* a);
 API_EXPORT uint64_t rangeGroupSize(const RangeGroupHandle rangeGroup);
 API_EXPORT void rangeGroupWrite(const RangeGroupHandle rangeGroup, int32_t* buffer);
+API_EXPORT void rangeGroupUpdateCache(const RangeGroupHandle rangeGroup);
 }

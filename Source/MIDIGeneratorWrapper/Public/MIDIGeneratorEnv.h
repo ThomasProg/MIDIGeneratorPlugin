@@ -13,6 +13,14 @@ struct FMIDIGeneratorEnv;
 class FMIDIGeneratorProxy;
 using FMIDIGeneratorProxyPtr = TSharedPtr<FMIDIGeneratorProxy, ESPMode::ThreadSafe>;
 
+DECLARE_CYCLE_STAT(TEXT("GenThread::LogitProcessing1"), STAT_GenThread_LogitProcessing1, STATGROUP_Game);
+DECLARE_CYCLE_STAT(TEXT("GenThread::LogitProcessing2"), STAT_GenThread_LogitProcessing2, STATGROUP_Game);
+DECLARE_CYCLE_STAT(TEXT("GenThread::LogitProcessing3"), STAT_GenThread_LogitProcessing3, STATGROUP_Game);
+DECLARE_CYCLE_STAT(TEXT("GenThread::LogitProcessing4"), STAT_GenThread_LogitProcessing4, STATGROUP_Game);
+DECLARE_CYCLE_STAT(TEXT("GenThread::LogitProcessing5"), STAT_GenThread_LogitProcessing5, STATGROUP_Game);
+DECLARE_CYCLE_STAT(TEXT("GenThread::LogitProcessing6"), STAT_GenThread_LogitProcessing6, STATGROUP_Game);
+DECLARE_CYCLE_STAT(TEXT("GenThread::LogitProcessing7"), STAT_GenThread_LogitProcessing7, STATGROUP_Game);
+
 class FMIDIGeneratorProxy final : public Audio::TProxyData<FMIDIGeneratorProxy>
 {
 public:
@@ -74,6 +82,7 @@ public:
 	RangeGroupHandle PitchRangeGroup;
 	RangeGroupHandle VelocityRangeGroup;
 	RangeGroupHandle DurationRangeGroup;
+	RangeGroupHandle TimeShiftRangeGroup;
 	RangeGroupHandle AllRangeGroup;
 
 public:

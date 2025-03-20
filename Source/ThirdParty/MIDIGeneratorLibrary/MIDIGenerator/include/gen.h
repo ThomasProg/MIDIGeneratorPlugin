@@ -115,6 +115,7 @@ extern "C"
     API_EXPORT void tokenizer_addTokensStartingByPitch(MidiTokenizerHandle tokenizer, RangeGroupHandle outRangeGroup);
     API_EXPORT void tokenizer_addTokensStartingByVelocity(MidiTokenizerHandle tokenizer, RangeGroupHandle outRangeGroup);
     API_EXPORT void tokenizer_addTokensStartingByDuration(MidiTokenizerHandle tokenizer, RangeGroupHandle outRangeGroup);
+    API_EXPORT void tokenizer_addTokensStartingByTimeShift(MidiTokenizerHandle tokenizer, RangeGroupHandle outRangeGroup);
 
     API_EXPORT const char* tokenizer_decodedTokenToString(MidiTokenizerHandle tokenizer, std::int32_t decodedToken);
 
