@@ -24,8 +24,13 @@ protected:
 
 public:
     CResult loadOnnxModel(const Ort::Env& env, const char* modelPath);
+    void generate(const Ort::IoBinding& ioBindings, CppResult& outResult);
 
     virtual CResult onPostOnnxLoad() { return CResult(); }
+    Ort::Session* getSession()
+    {
+        return &*session;
+    }
 };
 
 // Inference Pipeline

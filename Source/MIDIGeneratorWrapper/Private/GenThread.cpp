@@ -411,34 +411,34 @@ uint32 FGenThread::Run()
 			}
 		}
 
-		if (NbTokensSinceLastRefresh >= LineNbMaxToken)
-		{
-			if (Pipeline != nullptr)
-			{
-				Pipeline->reset();
-			}
-			else
-			{
-				runInstance_reset(runInstance);
-			}
+		//if (NbTokensSinceLastRefresh >= LineNbMaxToken)
+		//{
+		//	if (Pipeline != nullptr)
+		//	{
+		//		Pipeline->reset();
+		//	}
+		//	else
+		//	{
+		//		runInstance_reset(runInstance);
+		//	}
 
-			TArray<int32> Context;
-			int32 start = FMath::Max(0, EncodedTokens.Num() - LineNbMaxToken / 2);
-			for (int32 i = start; i < EncodedTokens.Num(); i++)
-			{
-				Context.Add(EncodedTokens[i]);
-			}
+		//	TArray<int32> Context;
+		//	int32 start = FMath::Max(0, EncodedTokens.Num() - LineNbMaxToken / 2);
+		//	for (int32 i = start; i < EncodedTokens.Num(); i++)
+		//	{
+		//		Context.Add(EncodedTokens[i]);
+		//	}
 
-			if (Pipeline != nullptr)
-			{
-				Pipeline->batchSet(Batch2, Context.GetData(), Context.Num(), start);
-			}
-			else
-			{
-				batch_set(batch, Context.GetData(), Context.Num(), start);
-			}
-			NbTokensSinceLastRefresh = 0;
-		}
+		//	if (Pipeline != nullptr)
+		//	{
+		//		Pipeline->batchSet(Batch2, Context.GetData(), Context.Num(), start);
+		//	}
+		//	else
+		//	{
+		//		batch_set(batch, Context.GetData(), Context.Num(), start);
+		//	}
+		//	NbTokensSinceLastRefresh = 0;
+		//}
 
 		//if (SearchStrategyData == nullptr || SearchStrategy == nullptr)
 		//{

@@ -27,6 +27,8 @@ namespace Ort
 {
     struct Env;
     struct Session;
+    struct Value;
+    struct IoBinding;
 }
 
 class MidiTokenizer;

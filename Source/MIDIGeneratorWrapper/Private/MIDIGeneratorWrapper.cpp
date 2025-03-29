@@ -6,6 +6,9 @@
 #include "Interfaces/IPluginManager.h"
 #include "Misc/Paths.h"
 #include "HAL/PlatformProcess.h"
+#include "musicGenerator.h"
+#include "llama.h"
+#include "mistral.h"
 
 #define LOCTEXT_NAMESPACE "FMIDIGeneratorWrapperModule"
 
@@ -34,8 +37,9 @@ void FMIDIGeneratorWrapperModule::StartupModule()
 
 	if (ExampleLibraryHandle)
 	{
-		// Call the test function in the third party library that opens a message box
-		//ExampleLibraryFunction();
+		registerGptModelBuilder();
+		registerLlamaModelBuilder();
+		registerMistralModelBuilder();
 	}
 	else
 	{
@@ -45,6 +49,8 @@ void FMIDIGeneratorWrapperModule::StartupModule()
 		);
 		FMessageDialog::Open(EAppMsgType::Ok, ErrorMessage);
 	}
+
+
 }
 
 void FMIDIGeneratorWrapperModule::ShutdownModule()

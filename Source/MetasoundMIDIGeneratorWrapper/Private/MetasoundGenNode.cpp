@@ -88,6 +88,7 @@ namespace Metasound
 
 
 			Outputs.MidiStream->SetMidiFile(gen.MidiDataProxy);
+			gen.SetClock(*Outputs.MidiClock);
 
 			Outputs.MidiClock->RegisterHiResPlayCursor(this);
 			Outputs.MidiStream->SetClock(*Outputs.MidiClock);

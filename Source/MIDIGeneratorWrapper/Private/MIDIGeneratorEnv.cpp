@@ -10,6 +10,7 @@
 #include "abstractPipeline.hpp"
 #include "logitProcessing.h"
 #include "logitProcessing.hpp"
+#include "searchArgs.h"
 
 FMIDIGeneratorProxy::FMIDIGeneratorProxy(UMIDIGeneratorEnv* InGeneratorEnv)
 {
@@ -273,6 +274,11 @@ void FMIDIGeneratorEnv::SetFilter()
 				pitchRangePenaltyTransform(args.logitsTensor, CurrentRangeGroup, 40, 80, 0.05, Tok);
 			}
 
+			{
+				//SCOPE_CYCLE_COUNTER(STAT_GenThread_LogitProcessing3);
+				//timeShiftRangePenaltyTransform(args.logitsTensor, CurrentRangeGroup, 1.5, 2.0, 1.05, Tok);
+			}
+
 			check(args.nbBatches == 1);
 			int nbTopTokenSize = 40;
 			size_t CurrentRangeGroupSize = rangeGroupSize(CurrentRangeGroup);
@@ -331,7 +337,7 @@ void FMIDIGeneratorEnv::DecodeTokens()
 			//int32 CurrentTick = 0;// args.self->Outputs.MidiClock->GetCurrentHiResTick();
 			int32 CurrentTick = args.self->CurrentTick;// args.self->Outputs.MidiClock->GetCurrentHiResTick();
 
-			int32 Tick = newNote.tick * 100 + args.self->AddedTicks;
+			int32 Tick = FMath::RoundToInt32(float(newNote.tick * 100) / args.self->Speed) + args.self->AddedTicks;
 
 			if (Tick < CurrentTick)
 			{
@@ -391,6 +397,11 @@ void FMIDIGeneratorEnv::DecodeTokens()
 	}
 }
 
+void FMIDIGeneratorEnv::SetClock(const HarmonixMetasound::FMidiClock& InClock)
+{
+	Clock = &InClock;
+}
+
 UMIDIGeneratorEnv::UMIDIGeneratorEnv()
 {
 	Generator = MakeShared<FMIDIGeneratorProxy, ESPMode::ThreadSafe>(nullptr);
@@ -430,6 +441,37 @@ void UMIDIGeneratorEnv::SetTokens(const TArray<int32>& InTokens)
 {
 	Generator->MidiGenerator->SetTokens(InTokens);
 }
+
+
+void UMIDIGeneratorEnv::SetTempo(float InTempo)
+{
+	const HarmonixMetasound::FMidiClock* Clock = Generator->MidiGenerator->Clock;
+	if (Clock == nullptr)
+	{
+		return;
+	}
+	int32 CurrentTick = Clock->GetCurrentMidiTick();
+
+	TSharedPtr<struct FMidiFileData>& MidiFileData = Generator->MidiGenerator->MidiFileData;
+	MidiFileData->AddTempoChange(0, CurrentTick, InTempo);
+
+	//Clock.time
+
+	//MidiFileData->SongMaps.GetTempoMap().MsToTick()
+
+
+
+	//->AddTempoChange() = InTempo;
+
+	//int32 CurrentTempo = 120;
+	//int32 CurrentTimeSigNum = 4;
+	//int32 CurrentTimeSigDenom = 4;
+	//MidiFileData = HarmonixMetasound::FMidiClock::MakeClockConductorMidiData(CurrentTempo, CurrentTimeSigNum, CurrentTimeSigDenom);
+
+	//MidiFileData->MidiFileName = "Generated";
+	//MidiFileData->TicksPerQuarterNote = 16;
+}
+
 
 TSharedPtr<Audio::IProxyData> UMIDIGeneratorEnv::CreateProxyData(const Audio::FProxyDataInitParams& InitParams)
 {

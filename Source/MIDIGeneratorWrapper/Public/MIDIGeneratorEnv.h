@@ -7,6 +7,7 @@
 #include "HarmonixMidi/MidiFile.h"
 #include "IAudioProxyInitializer.h"
 #include "fwd.h"
+#include "HarmonixMetasound/DataTypes/MidiClock.h"
 #include "MIDIGeneratorEnv.generated.h"
 
 struct FMIDIGeneratorEnv;
@@ -60,6 +61,9 @@ public:
 	UPROPERTY(BlueprintReadWrite, EditAnywhere)
 	int32 minIntensity = 0;
 
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	float Speed = 1.0;
+
 	TSharedPtr<class FGenThread> GenThread = MakeShared<FGenThread>();
 
 	TArray<int32> NewEncodedTokens;
@@ -85,6 +89,8 @@ public:
 	RangeGroupHandle TimeShiftRangeGroup;
 	RangeGroupHandle AllRangeGroup;
 
+	const HarmonixMetasound::FMidiClock* Clock = nullptr;
+
 public:
 	~FMIDIGeneratorEnv();
 	void StartGeneration();
@@ -98,6 +104,8 @@ public:
 
 	void SetFilter();
 	void DecodeTokens();
+
+	void SetClock(const HarmonixMetasound::FMidiClock& InClock);
 };
 
 
@@ -151,6 +159,9 @@ public:
 
 	UFUNCTION(BlueprintCallable)
 	void SetTokens(const TArray<int32>& InTokens);
+
+	UFUNCTION(BlueprintCallable)
+	void SetTempo(float InTempo);
 
 	//~Begin IAudioProxyDataFactory Interface.
 	virtual TSharedPtr<Audio::IProxyData> CreateProxyData(const Audio::FProxyDataInitParams& InitParams) override;
