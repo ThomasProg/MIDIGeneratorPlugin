@@ -12,6 +12,7 @@ DECLARE_CYCLE_STAT(TEXT("GenThread"), STAT_GenThread, STATGROUP_Game);
 DECLARE_DELEGATE_OneParam(FOnGenerated, int32);
 DECLARE_DELEGATE_OneParam(FOnSearch, const struct SearchArgs& args);
 DECLARE_DELEGATE(FOnInit);
+DECLARE_DELEGATE_OneParam(FOnCacheRemoved, int32 libTick);
 
 //class FGenThread;
 //class FMIDIGeneratorProxy;
@@ -96,12 +97,16 @@ public:
 	virtual void Stop() override;
 	// END FRunnable
 
+	void RemoveCacheAfterTick(int32 GenLibTick);
+
 protected:
 	// BEGIN FRunnable 
 	virtual bool Init() override;
 	virtual uint32 Run() override;
 	virtual void Exit() override;
 	// END FRunnable
+
+	void RemoveCacheAfterTickInternal();
 
 private:
 	IAutoRegressivePipeline* Pipeline = nullptr;
@@ -118,6 +123,8 @@ private:
 	FOnSearch OnSearch;
 	FOnGenerated OnGenerated;
 	FOnInit OnInit;
+
+	// OnGenerated mutex
 	FCriticalSection Mutex;
 
 	RunInstanceHandle runInstance;
@@ -137,11 +144,15 @@ private:
 	FRunnableThread* Thread;
 	bool bShutdown = false;
 
-
-
 	int32 NbTokensSinceLastRefresh = 0;
 
 	////~Begin IAudioProxyDataFactory Interface.
 	//virtual TSharedPtr<Audio::IProxyData> CreateProxyData(const Audio::FProxyDataInitParams& InitParams) override;
 	////~ End IAudioProxyDataFactory Interface.
+
+public:
+	bool ShouldIgnoreNextToken = false;
+	int32 CacheTickToRemove = 0;
+
+	FOnCacheRemoved OnCacheRemoved;
 };

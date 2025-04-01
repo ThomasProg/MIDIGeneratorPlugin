@@ -58,7 +58,6 @@ namespace Metasound
 	class FAIGenOperator : public TExecutableOperator<FAIGenOperator>, public FMidiVoiceGeneratorBase, public HarmonixMetasound::FMusicTransportControllable, public FMidiPlayCursor
 	{
 	public:
-		// Constructor
 		FAIGenOperator(const Metasound::FBuildOperatorParams& InParams,
 			const HarmonixMetasound::FMidiClockReadRef& InMidiClock,
 			const HarmonixMetasound::FMusicTransportEventStreamReadRef& InTransport,
@@ -73,33 +72,14 @@ namespace Metasound
 
 		void OnGenEnvSet(FMIDIGeneratorEnv& gen)
 		{
-			//int32 CurrentTempo = 120;
-			//int32 CurrentTimeSigNum = 4;
-			//int32 CurrentTimeSigDenom = 4;
-			//gen.MidiFileData = HarmonixMetasound::FMidiClock::MakeClockConductorMidiData(CurrentTempo, CurrentTimeSigNum, CurrentTimeSigDenom);
-
-			//gen.MidiFileData->MidiFileName = "Generated";
-			//gen.MidiFileData->TicksPerQuarterNote = 16;
-			//FMidiTrack track;
-			//track.AddEvent(FMidiEvent(0, FMidiMsg::CreateAllNotesKill()));
-			//gen.MidiFileData->Tracks.Add(MoveTemp(track));
-
-			//gen.MidiDataProxy = MakeShared<FMidiFileProxy, ESPMode::ThreadSafe>(gen.MidiFileData);
-
-
 			Outputs.MidiStream->SetMidiFile(gen.MidiDataProxy);
 			gen.SetClock(*Outputs.MidiClock);
 
 			Outputs.MidiClock->RegisterHiResPlayCursor(this);
 			Outputs.MidiStream->SetClock(*Outputs.MidiClock);
-			//Outputs.MidiStream->SetTicksPerQuarterNote(1);
 
 			Outputs.MidiClock->AttachToMidiResource(gen.MidiFileData);
 		}
-
-		//std::int32_t nextTokenToProcess = 0;
-		////MidiConverterHandle converter = nullptr;
-		//int32 AddedTicks = 0;
 
 		void TryUpdateGenThreadInput()
 		{
@@ -122,10 +102,6 @@ namespace Metasound
 						Generator->StartGeneration();
 					}
 
-					//TokenModifSection.Lock();
-					//Generator->GenThread->GetEncodedTokens(Generator->NewEncodedTokens);
-					//UpdateScheduledMidiEvents();
-					//TokenModifSection.Unlock();
 					Generator->DecodeTokens();
 				}
 			}
@@ -140,97 +116,6 @@ namespace Metasound
 		{
 			return Generator->GenThread->GetGen();
 		}
-
-		//void UpdateScheduledMidiEvents()
-		//{
-		//	if (GetTok() == nullptr)
-		//	{
-		//		return;
-		//	}
-
-		//	Outputs.MidiClock->GetDrivingMidiPlayCursorMgr()->LockForMidiDataChanges();
-
-		//	struct Args
-		//	{
-		//		FAIGenOperator* self;
-
-		//		int32 LastTick = 0;
-		//	};
-
-		//	Args args{ this };
-
-		//	//if (converter == nullptr)
-		//	//	converter = createMidiConverter();
-
-		//	converterSetTokenizer(converter, GetTok());
-
-		//	int32 currentTick = Outputs.MidiClock->GetCurrentHiResTick();
-
-		//	converterSetOnNote(converter, [](void* data, const Note& newNote)
-		//		{
-		//			Args& args = *(Args*)(data);
-
-		//			int32 Channel = 1;
-		//			int32 NoteNumber = newNote.pitch;
-		//			int32 Velocity = newNote.velocity;
-
-		//			int32 Track = 0;
-
-		//			int32 CurrentTick = args.self->Outputs.MidiClock->GetCurrentHiResTick();
-
-		//			int32 Tick = newNote.tick * 100 + args.self->AddedTicks;
-
-		//			if (Tick < CurrentTick)
-		//			{
-		//				args.self->AddedTicks += CurrentTick - Tick;
-		//				Tick = CurrentTick;
-		//			}
-
-		//			if (args.self->Generator->MidiFileData->Tracks[0].GetUnsortedEvents().IsEmpty() or Tick >= args.self->Generator->MidiFileData->Tracks[0].GetEvents().Last().GetTick())
-		//			{
-		//				args.LastTick = Tick;
-
-		//				FMidiMsg Msg{ FMidiMsg::CreateNoteOn(Channel - 1, NoteNumber, Velocity) };
-		//				args.self->Generator->MidiFileData->Tracks[0].AddEvent(FMidiEvent(Tick, Msg));
-		//			}
-
-		//		});
-
-		//	int32* newDecodedTokens = nullptr;
-		//	int32 newDecodedTokensSize = 0;
-		//	tokenizer_decodeIDs(GetTok(), Generator->NewEncodedTokens.GetData(), Generator->NewEncodedTokens.Num(), &newDecodedTokens, &newDecodedTokensSize);
-		//	Generator->NewEncodedTokens.Empty();
-		//	for (int32 newDecodedTokenIndex = 0; newDecodedTokenIndex < newDecodedTokensSize; newDecodedTokenIndex++)
-		//	{
-		//		DecodedTokens.Add(newDecodedTokens[newDecodedTokenIndex]);
-		//	}
-
-		//	tokenizer_decodeIDs_free(newDecodedTokens);
-
-		//	std::int32_t i = nextTokenToProcess;
-		//	while (i < DecodedTokens.Num())
-		//	{
-
-		//		bool isSuccess = converterProcessToken(converter, DecodedTokens.GetData(), DecodedTokens.Num(), &i, &args);
-		//		if (isSuccess)
-		//		{
-		//			nextTokenToProcess = i;
-		//		}
-		//		else
-		//		{
-		//			i++; // ignore current token and continue
-		//		}
-		//	}
-
-		//	ensureMsgf(!Generator->MidiFileData->Tracks[0].GetUnsortedEvents().IsEmpty(), TEXT("Should not be empty!"));
-		//	//checkf((Index >= 0)& (Index < ArrayNum), TEXT("Array index out of bounds: %lld into an array of size %lld"), (long long)Index, (long long)ArrayNum); // & for one branch
-
-		//	//Outputs.MidiClock->MidiDataChangesComplete(FMidiPlayCursorMgr::EMidiChangePositionCorrectMode::MaintainTick);
-
-		//	//MidiFileData->Tracks[0].Sort(); // TOO SLOW, O(n*log(n))
-
-		//	Outputs.MidiClock->GetDrivingMidiPlayCursorMgr()->MidiDataChangeComplete(FMidiPlayCursorMgr::EMidiChangePositionCorrectMode::MaintainTick);
-		//}
 
 		~FAIGenOperator()
 		{
@@ -336,30 +221,6 @@ namespace Metasound
 			{
 				return;
 			}
-
-			//int32 currentTick = Outputs.MidiClock->GetCurrentHiResTick();
-			//int32 lastTick = Generator->MidiFileData->Tracks[0].GetEvents().Last().GetTick();
-
-			//if (Generator->GenThread.IsValid() && bShouldUpdateTokens)
-			//{
-			//	TokenModifSection.Lock();
-			//	UpdateScheduledMidiEvents();
-			//	bShouldUpdateTokens = false;
-			//	TokenModifSection.Unlock();
-			//}
-
-			//// Block until music is generated
-			//while (Generator.IsValid() && Generator->GenThread.IsValid() && currentTick > lastTick)
-			//{
-			//	if (bShouldUpdateTokens)
-			//	{
-			//		TokenModifSection.Lock();
-			//		UpdateScheduledMidiEvents();
-			//		bShouldUpdateTokens = false;
-			//		TokenModifSection.Unlock();
-			//	}
-			//	lastTick = Generator->MidiFileData->Tracks[0].GetEvents().Last().GetTick();
-			//}
 
 			Generator->CurrentTick = Outputs.MidiClock->GetCurrentHiResTick();
 			Outputs.MidiClock->GetDrivingMidiPlayCursorMgr()->LockForMidiDataChanges();
@@ -490,22 +351,11 @@ namespace Metasound
 		FInputs Inputs;
 		FOutputs Outputs;
 
-		//FMidiFileProxyPtr MidiDataProxy;
-		//TSharedPtr<FMidiFileData> MidiFileData;
-
-		//TArray<int32> NewEncodedTokens;
-		TArray<int32> DecodedTokens;
-
 		FSampleCount BlockSize = 0;
 		int32 PrerollBars = 8;
-		//TSharedPtr<FGenThread> GenThread;
 		TSharedPtr<FMIDIGeneratorEnv> Generator;
 
-		TOptional<HarmonixMetasound::FMidiStreamEvent> LastNoteOn;
 		bool Enabled{ true };
-
-		bool bShouldUpdateTokens = false;
-		//FCriticalSection TokenModifSection;
 	};
 
 

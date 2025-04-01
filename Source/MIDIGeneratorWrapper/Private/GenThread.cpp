@@ -3,6 +3,7 @@
 #include "GenThread.h"
 #include "utilities.hpp"
 #include "abstractPipeline.hpp"
+#include "generationHistory.h"
 
 FString FGenThread::RelativeToAbsoluteContentPath(const FString& BaseStr)
 {
@@ -411,46 +412,19 @@ uint32 FGenThread::Run()
 			}
 		}
 
-		//if (NbTokensSinceLastRefresh >= LineNbMaxToken)
-		//{
-		//	if (Pipeline != nullptr)
-		//	{
-		//		Pipeline->reset();
-		//	}
-		//	else
-		//	{
-		//		runInstance_reset(runInstance);
-		//	}
-
-		//	TArray<int32> Context;
-		//	int32 start = FMath::Max(0, EncodedTokens.Num() - LineNbMaxToken / 2);
-		//	for (int32 i = start; i < EncodedTokens.Num(); i++)
-		//	{
-		//		Context.Add(EncodedTokens[i]);
-		//	}
-
-		//	if (Pipeline != nullptr)
-		//	{
-		//		Pipeline->batchSet(Batch2, Context.GetData(), Context.Num(), start);
-		//	}
-		//	else
-		//	{
-		//		batch_set(batch, Context.GetData(), Context.Num(), start);
-		//	}
-		//	NbTokensSinceLastRefresh = 0;
-		//}
-
-		//if (SearchStrategyData == nullptr || SearchStrategy == nullptr)
-		//{
-		//	continue;
-		//}
-
 		Mutex.Lock();
 		if (!OnSearch.IsBound())
 		{
 			Mutex.Unlock();
 			continue;
 		}
+
+		if (ShouldIgnoreNextToken)
+		{
+			ShouldIgnoreNextToken = false;
+			RemoveCacheAfterTickInternal();
+		}
+
 		Mutex.Unlock();
 
 		if (Pipeline != nullptr)
@@ -469,6 +443,14 @@ uint32 FGenThread::Run()
 				UE_LOG(LogTemp, Error, TEXT("An error occurred in function %s!\n%hs"), *FString(__FUNCTION__), Result.GetError());
 				return -1;
 			}
+
+			Mutex.Lock();
+			if (ShouldIgnoreNextToken)
+			{
+				Mutex.Unlock();
+				continue;
+			}
+			Mutex.Unlock();
 
 			Pipeline->postGenerate(Result);
 			if (!Result.IsSuccess())
@@ -507,6 +489,14 @@ uint32 FGenThread::Run()
 			}
 		}
 
+		Mutex.Lock();
+		if (ShouldIgnoreNextToken)
+		{
+			Mutex.Unlock();
+			continue;
+		}
+		Mutex.Unlock();
+
 		int32 newToken;
 		if (Pipeline != nullptr)
 		{
@@ -525,6 +515,12 @@ uint32 FGenThread::Run()
 		if (!bShutdown)
 		{
 			Mutex.Lock();
+			if (ShouldIgnoreNextToken)
+			{
+				Mutex.Unlock();
+				continue;
+			}
+
 			OnGenerated.ExecuteIfBound(newToken);
 			Mutex.Unlock();
 		}
@@ -557,6 +553,20 @@ void FGenThread::Exit()
 void FGenThread::Stop() 
 {
 	bShutdown = true;
+}
+
+void FGenThread::RemoveCacheAfterTickInternal()
+{
+	Pipeline->batchUnwind(Batch2, CacheTickToRemove);
+	OnCacheRemoved.ExecuteIfBound(CacheTickToRemove);
+}
+
+void FGenThread::RemoveCacheAfterTick(int32 GenLibTick)
+{
+	Mutex.Lock();
+	ShouldIgnoreNextToken = true;
+	CacheTickToRemove = GenLibTick;
+	Mutex.Unlock();
 }
 
 //void FGenThread::SetSearchStrategy(void* InSearchStrategyData, TSearchStrategy InSearchStrategy)

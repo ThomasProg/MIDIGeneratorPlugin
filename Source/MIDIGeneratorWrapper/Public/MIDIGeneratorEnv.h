@@ -61,9 +61,6 @@ public:
 	UPROPERTY(BlueprintReadWrite, EditAnywhere)
 	int32 minIntensity = 0;
 
-	UPROPERTY(BlueprintReadWrite, EditAnywhere)
-	float Speed = 1.0;
-
 	TSharedPtr<class FGenThread> GenThread = MakeShared<FGenThread>();
 
 	TArray<int32> NewEncodedTokens;
@@ -81,6 +78,8 @@ public:
 	int32 AddedTicks = 0;
 	int32 nextTokenToProcess = 0;
 	int32 nbSkips = 0;
+
+	int32 nextNoteIndexToProcess = 0;
 
 	RangeGroupHandle BaseRangeGroup;
 	RangeGroupHandle PitchRangeGroup;
@@ -106,6 +105,11 @@ public:
 	void DecodeTokens();
 
 	void SetClock(const HarmonixMetasound::FMidiClock& InClock);
+	void RegenerateCacheAfterDelay(float DelayInMs);
+	void UpdateCurrentRangeGroup(int32 LastDecodedToken);
+
+	int32 UETickToGenLibTick(float tick);
+	float GenLibTickToUETick(int32 tick);
 };
 
 
@@ -162,6 +166,9 @@ public:
 
 	UFUNCTION(BlueprintCallable)
 	void SetTempo(float InTempo);
+
+	UFUNCTION(BlueprintCallable)
+	void RegenerateCacheAfterDelay(float DelayInMs);
 
 	//~Begin IAudioProxyDataFactory Interface.
 	virtual TSharedPtr<Audio::IProxyData> CreateProxyData(const Audio::FProxyDataInitParams& InitParams) override;
