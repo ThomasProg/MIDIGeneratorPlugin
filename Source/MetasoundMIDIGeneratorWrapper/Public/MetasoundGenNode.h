@@ -6,6 +6,8 @@
 
 #include "HarmonixMetasound/Common.h"
 
+DECLARE_CYCLE_STAT(TEXT("MidiGen"), STAT_MidiGen, STATGROUP_Game);
+
 //#undef DECLARE_METASOUND_PARAM_EXTERN
 //#undef DECLARE_METASOUND_PARAM_ALIAS
 //

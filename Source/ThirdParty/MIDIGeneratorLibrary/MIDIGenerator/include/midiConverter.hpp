@@ -13,13 +13,23 @@ public:
     RedirectorHandle redirector;
 
     void (*onNote)(void* data, const Note&);
+    void (*onNewTick)(void* data, int32_t newTick);
 
     virtual void reset() = 0;
     virtual bool processToken(const int32_t* tokens, int32_t nbTokens, std::int32_t& index, void* data = nullptr) = 0;
     bool processToken(const std::vector<int32_t>& tokens, std::int32_t& index, void* data = nullptr);
 
     // tick is included
-    virtual void unwind(int32_t tick) {}
+    virtual void rewind(int32_t tick) {}
+    virtual void undo() {}
+
+    void tryOnNewTick(void* userData, int32_t newTick)
+    {
+        if (onNewTick != nullptr)
+        {
+            onNewTick(userData, newTick);
+        }
+    }
 
     virtual ~MIDIConverter() = default;
 };
@@ -27,7 +37,7 @@ public:
 
 
 // miditok/tokenizations/remi.py/_tokens_to_score()
-class API_EXPORT REMIConverter: public MIDIConverter 
+class REMIConverter: public MIDIConverter 
 {
 public:
     std::int32_t currentTick = 0;
@@ -44,7 +54,7 @@ public:
 
 
 // miditok/tokenizations/tsd.py/_tokens_to_score()
-class API_EXPORT TSDConverter: public MIDIConverter 
+class TSDConverter: public MIDIConverter 
 {
 public:
     // The data that can change with every processToken
@@ -65,6 +75,7 @@ public:
     TSDConverter();
     virtual void reset() override;
     virtual bool processToken(const int32_t* tokens, int32_t nbTokens, std::int32_t& index, void* data = nullptr) override;
-    virtual void unwind(int32_t tick) override;
+    virtual void rewind(int32_t tick) override;
+    virtual void undo() override;
 };
 

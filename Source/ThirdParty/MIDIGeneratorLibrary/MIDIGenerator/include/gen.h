@@ -106,6 +106,7 @@ extern "C"
     API_EXPORT CResult tokenizer_decodeIDs(MidiTokenizerHandle tokenizer, const std::int32_t* inputIDs, std::int32_t size, std::int32_t** outputIDs, std::int32_t* outSize);
     API_EXPORT void tokenizer_decodeIDs_free(std::int32_t* outputIDs);
 
+    API_EXPORT void tokenizer_decodeTokenFast(const MidiTokenizer* tokenizer, std::int32_t encodedToken, const std::int32_t** outDecodedTokensBegin, const std::int32_t** outDecodedTokensEnd);
     API_EXPORT void tokenizer_decodeToken(MidiTokenizerHandle tokenizer, std::int32_t encodedToken, std::int32_t** outDecodedTokens, std::int32_t* outNbDecodedTokens);
     API_EXPORT void tokenizer_decodeToken_free(std::int32_t* outputIDs);
 
@@ -173,14 +174,18 @@ extern "C"
     API_EXPORT MidiTokenizerHandle createMidiTokenizer(const char* tokenizerPath);
     API_EXPORT void destroyMidiTokenizer(MidiTokenizerHandle tokenizer);
 
-    API_EXPORT bool isBarNone(MidiTokenizerHandle tokenizer, std::int32_t token);
-    API_EXPORT bool isPosition(MidiTokenizerHandle tokenizer, std::int32_t token);
-    API_EXPORT bool isPitch(MidiTokenizerHandle tokenizer, std::int32_t token);
-    API_EXPORT bool isDuration(MidiTokenizerHandle tokenizer, std::int32_t token);
-    API_EXPORT bool isVelocity(MidiTokenizerHandle tokenizer, std::int32_t token);
+    API_EXPORT bool isBarNone(const MidiTokenizer* tokenizer, std::int32_t token);
+    API_EXPORT bool isPosition(const MidiTokenizer* tokenizer, std::int32_t token);
+    API_EXPORT bool isTimeShift(const MidiTokenizer* tokenizer, std::int32_t token);
+    API_EXPORT bool isPitch(const MidiTokenizer* tokenizer, std::int32_t token);
+    API_EXPORT bool isDuration(const MidiTokenizer* tokenizer, std::int32_t token);
+    API_EXPORT bool isVelocity(const MidiTokenizer* tokenizer, std::int32_t token);
 
-    API_EXPORT std::int32_t getPosition(MidiTokenizerHandle tokenizer, std::int32_t token);
-    API_EXPORT std::int32_t getPitch(MidiTokenizerHandle tokenizer, std::int32_t token);
+    API_EXPORT std::int32_t getPosition(const MidiTokenizer* tokenizer, std::int32_t token);
+    API_EXPORT std::int32_t getPitch(const MidiTokenizer* tokenizer, std::int32_t token);
+
+    API_EXPORT int32_t strToToken(const MidiTokenizer* tokenizer, const char* str);
+    API_EXPORT int32_t findPitchToken(const MidiTokenizer* tokenizer, int32_t pitch);
 }
 
 

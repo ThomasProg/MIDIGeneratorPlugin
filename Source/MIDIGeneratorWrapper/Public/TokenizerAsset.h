@@ -63,6 +63,10 @@ public:
 	{
 		return isDuration(Tokenizer, decodedToken);
 	}
+	bool IsTimeShift(int32 decodedToken) const
+	{
+		return isTimeShift(Tokenizer, decodedToken);
+	}
 
 	bool IsPosition(int32 decodedToken) const
 	{

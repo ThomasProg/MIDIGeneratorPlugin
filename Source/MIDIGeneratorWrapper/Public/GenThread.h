@@ -57,6 +57,7 @@ public:
 
 	void SetTokens(const TArray<int32>& InTokens);
 
+	FGenThread();
 	~FGenThread();
 
 	//MidiTokenizerHandle GetTok() const
@@ -110,8 +111,8 @@ protected:
 
 private:
 	IAutoRegressivePipeline* Pipeline = nullptr;
-	EnvHandle env;
-	MusicGeneratorHandle generator;
+	EnvHandle env = nullptr;
+	MusicGeneratorHandle generator = nullptr;
 
 	FString TokenizerPath; 
 	FString ModelPath;
@@ -127,8 +128,8 @@ private:
 	// OnGenerated mutex
 	FCriticalSection Mutex;
 
-	RunInstanceHandle runInstance;
-	BatchHandle batch;
+	RunInstanceHandle runInstance = nullptr;
+	BatchHandle batch = nullptr;
 	AutoRegressiveBatchHandle Batch2;
 
 	TArray<int32> EncodedTokens;
@@ -141,7 +142,7 @@ private:
 
 	bool forceReupdate = false;
 
-	FRunnableThread* Thread;
+	FRunnableThread* Thread = nullptr;
 	bool bShutdown = false;
 
 	int32 NbTokensSinceLastRefresh = 0;
@@ -151,8 +152,17 @@ private:
 	////~ End IAudioProxyDataFactory Interface.
 
 public:
-	bool ShouldIgnoreNextToken = false;
-	int32 CacheTickToRemove = 0;
+	FThreadSafeBool ShouldIgnoreNextToken = false;
+	FThreadSafeCounter CacheTickToRemove = 0;
 
 	FOnCacheRemoved OnCacheRemoved;
+
+	FEvent* Semaphore = nullptr;
+
+	FThreadSafeCounter CurrentTick;
+	int32 NbMinTicksAhead = 200;
+	int32 NbMaxTicksAhead = 400;
+
+	bool ShouldResumeGeneration() const;
+	bool ShouldSleep() const;
 };

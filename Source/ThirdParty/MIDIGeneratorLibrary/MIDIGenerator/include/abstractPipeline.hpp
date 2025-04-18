@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cstdio>
+#include <cstdint>
 #include <string>
 #include "utilities.hpp"
 #include "fwd.hpp"
@@ -67,11 +67,15 @@ public:
     // If the model has to be updated, for example RNN state being reset if resetting the batch
     virtual int32_t batchGetLastGeneratedToken(AutoRegressiveBatchHandle batch) = 0;
     virtual void batchSet(AutoRegressiveBatchHandle batch, const DataType* inputTokens, std::int32_t nbTokens, std::int32_t fromPos) = 0;
-    virtual void batchUnwind(AutoRegressiveBatchHandle batch, int32_t tick) {};
+    virtual void batchRewind(AutoRegressiveBatchHandle batch, int32_t tick) {};
 
     virtual void setMaxInputLength(int32_t newMaxInputLength) = 0;
     
     // Owned by the pipeline, no need to destroy
     virtual void createHistory(const MidiTokenizer& tokenizer) = 0;
     virtual class GenerationHistory* getHistory(AutoRegressiveBatchHandle batchHandle) const = 0;
+
+    using Callback = void(*)(int32_t tick, void* userData);
+    virtual void addCallbackToSequencer(AutoRegressiveBatchHandle batchHandle, int32_t tick, Callback callback) {}
+    virtual void setSequencerUserData(AutoRegressiveBatchHandle batchHandle, void* userData) {}
 };

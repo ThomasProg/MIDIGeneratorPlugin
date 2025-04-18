@@ -215,6 +215,8 @@ namespace Metasound
 	public:
 		void Execute()
 		{
+			SCOPE_CYCLE_COUNTER(STAT_MidiGen);
+
 			TryUpdateGenThreadInput();
 
 			if ((!Generator.IsValid()) || GetTok() == nullptr)

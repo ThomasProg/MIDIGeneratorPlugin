@@ -17,7 +17,7 @@ void FMIDIGeneratorWrapperModule::StartupModule()
 	// This code will execute after your module is loaded into memory; the exact timing is specified in the .uplugin file per-module
 
 	// Get the base directory of this plugin
-	FString BaseDir = IPluginManager::Get().FindPlugin("MIDIGeneratorWrapper")->GetBaseDir();
+	//FString BaseDir = IPluginManager::Get().FindPlugin("MIDIGeneratorWrapper")->GetBaseDir();
 
 	// Add on the relative location of the third party dll and load it
 	FString LibraryPath;
@@ -35,20 +35,20 @@ void FMIDIGeneratorWrapperModule::StartupModule()
 
 	ExampleLibraryHandle = !LibraryPath.IsEmpty() ? FPlatformProcess::GetDllHandle(*LibraryPath) : nullptr;
 
-	if (ExampleLibraryHandle)
-	{
+	//if (ExampleLibraryHandle)
+	//{
 		registerGptModelBuilder();
 		registerLlamaModelBuilder();
 		registerMistralModelBuilder();
-	}
-	else
-	{
-		FText ErrorMessage = FText::Format(
-			LOCTEXT("ThirdPartyLibraryError", "MIDIGeneratorWrapper: Failed to load the library at path: {0}"),
-			FText::FromString(LibraryPath)
-		);
-		FMessageDialog::Open(EAppMsgType::Ok, ErrorMessage);
-	}
+	//}
+	//else
+	//{
+	//	FText ErrorMessage = FText::Format(
+	//		LOCTEXT("ThirdPartyLibraryError", "MIDIGeneratorWrapper: Failed to load the library at path: {0}"),
+	//		FText::FromString(LibraryPath)
+	//	);
+	//	FMessageDialog::Open(EAppMsgType::Ok, ErrorMessage);
+	//}
 
 
 }

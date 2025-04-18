@@ -22,6 +22,17 @@ extern "C"
     API_EXPORT void generationHistory_removeAfterTick(const GenerationHistoryHandle genHistory, int32_t tick);
     API_EXPORT void generationHistory_convert(const GenerationHistoryHandle genHistory);
     API_EXPORT void generationHistory_getNotes(const GenerationHistoryHandle genHistory, const struct Note** outNotes, size_t* outLength);
+    API_EXPORT void generationHistory_getNotesMut(const GenerationHistoryHandle genHistory, struct Note** outNotes, size_t* outLength);
+    API_EXPORT void generationHistory_addStandaloneNote(const GenerationHistoryHandle genHistory, struct Note* inNote);
+
+    typedef void (*TOnEncodedTokenAdded)(class OnAddTokensArgs* args);
+    API_EXPORT void generationHistory_setOnEncodedTokenAdded(const GenerationHistoryHandle genHistory, TOnEncodedTokenAdded inOnEncodedTokenAdd);
+    API_EXPORT TOnEncodedTokenAdded generationHistory_getDefaultOnEncodedTokenAdded();
+    API_EXPORT void generationHistory_setOnEncodedTokenAddedData(const GenerationHistoryHandle genHistory, void* inOnEncodedTokenAddData);
+
+    typedef void (*TOnNoteAdded)(void* userData);
+    API_EXPORT void generationHistory_setOnNoteAdded(GenerationHistory* genHistory, TOnNoteAdded inOnEncodedTokenAdd);
+    API_EXPORT void generationHistory_setOnNoteAddedData(GenerationHistory* genHistory, void* inOnEncodedTokenAddData);
 }
 
 extern "C" 

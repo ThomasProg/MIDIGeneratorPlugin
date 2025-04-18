@@ -22,6 +22,10 @@ DECLARE_CYCLE_STAT(TEXT("GenThread::LogitProcessing5"), STAT_GenThread_LogitProc
 DECLARE_CYCLE_STAT(TEXT("GenThread::LogitProcessing6"), STAT_GenThread_LogitProcessing6, STATGROUP_Game);
 DECLARE_CYCLE_STAT(TEXT("GenThread::LogitProcessing7"), STAT_GenThread_LogitProcessing7, STATGROUP_Game);
 
+DECLARE_CYCLE_STAT(TEXT("GenThread::DecodeToken1"), STAT_GenThread_DecodeToken1, STATGROUP_Game);
+DECLARE_CYCLE_STAT(TEXT("GenThread::DecodeToken2"), STAT_GenThread_DecodeToken2, STATGROUP_Game);
+DECLARE_CYCLE_STAT(TEXT("GenThread::DecodeToken3"), STAT_GenThread_DecodeToken3, STATGROUP_Game);
+
 class FMIDIGeneratorProxy final : public Audio::TProxyData<FMIDIGeneratorProxy>
 {
 public:
@@ -65,7 +69,6 @@ public:
 
 	TArray<int32> NewEncodedTokens;
 	bool bShouldUpdateTokens = false;
-	FCriticalSection EncodedTokensSection;
 	TArray<int32> DecodedTokens;
 
 	TSharedPtr<struct FMidiFileData> MidiFileData;
@@ -76,12 +79,11 @@ public:
 
 	int32 CurrentTick = 0;
 	int32 AddedTicks = 0;
-	int32 nextTokenToProcess = 0;
-	int32 nbSkips = 0;
 
 	int32 nextNoteIndexToProcess = 0;
 
 	RangeGroupHandle BaseRangeGroup;
+	RangeGroupHandle PitchTimeshiftRangeGroup;
 	RangeGroupHandle PitchRangeGroup;
 	RangeGroupHandle VelocityRangeGroup;
 	RangeGroupHandle DurationRangeGroup;
@@ -89,6 +91,20 @@ public:
 	RangeGroupHandle AllRangeGroup;
 
 	const HarmonixMetasound::FMidiClock* Clock = nullptr;
+
+
+	bool hasRegen = false;
+	int32 nbEncodedTokensSinceRegen = 0;
+	int nbAddedSinceLastTimeshift = 0;
+	int nbAddedSinceLast = 0;
+	//int32 hasRegenCounter = 0;
+	//int32 regenTick = 0;
+	//int32 regenNbPitches = 0;
+	float CacheRemoveTick = 0;
+
+	//int32 pitch1;
+	//int32 pitch2;
+	//int32 pitch3;
 
 public:
 	~FMIDIGeneratorEnv();

@@ -52,8 +52,20 @@ void FGenThread::SetTokens(const TArray<int32>& InTokens)
 	this->EncodedTokens = InTokens;
 }
 
+FGenThread::FGenThread()
+{
+	Semaphore = FGenericPlatformProcess::GetSynchEventFromPool(false);
+}
+
 FGenThread::~FGenThread()
 {
+	if (Semaphore)
+	{
+		Semaphore->Trigger();
+		FGenericPlatformProcess::ReturnSynchEventToPool(Semaphore);
+		Semaphore = nullptr;
+	}
+
 	if (Thread)
 	{
 		// Kill() is a blocking call, it waits for the thread to finish.
@@ -352,6 +364,29 @@ bool FGenThread::Init()
 	return true;
 }
 
+bool FGenThread::ShouldResumeGeneration() const
+{
+	GenerationHistory* History = Pipeline->getHistory(Batch2);
+	const Note* outNotes;
+	size_t outLength;
+	TokenHistoryHandle enchist = getEncodedTokensHistory(History);
+	generationHistory_getNotes(History, &outNotes, &outLength);
+	return outNotes[outLength - 1].tick < CurrentTick.GetValue() + NbMinTicksAhead;
+}
+
+bool FGenThread::ShouldSleep() const
+{
+	GenerationHistory* History = Pipeline->getHistory(Batch2);
+	const Note* outNotes = nullptr;
+	size_t outLength;
+	generationHistory_getNotes(History, &outNotes, &outLength);
+	if (outNotes == nullptr)
+	{
+		return false;
+	}
+	return outNotes[outLength - 1].tick >= CurrentTick.GetValue() + NbMaxTicksAhead;
+}
+
 uint32 FGenThread::Run()
 {
 	if (!forceReupdate)
@@ -381,6 +416,14 @@ uint32 FGenThread::Run()
 	while (!bShutdown)
 	{
 		SCOPE_CYCLE_COUNTER(STAT_GenThread);
+
+		GenerationHistory* History = Pipeline->getHistory(Batch2);
+		generationHistory_convert(History);
+
+		if (!ShouldIgnoreNextToken && ShouldSleep())
+		{
+			Semaphore->Wait();
+		}
 
 		if (forceReupdate)
 		{
@@ -418,14 +461,13 @@ uint32 FGenThread::Run()
 			Mutex.Unlock();
 			continue;
 		}
+		Mutex.Unlock();
 
 		if (ShouldIgnoreNextToken)
 		{
 			ShouldIgnoreNextToken = false;
 			RemoveCacheAfterTickInternal();
 		}
-
-		Mutex.Unlock();
 
 		if (Pipeline != nullptr)
 		{
@@ -444,13 +486,10 @@ uint32 FGenThread::Run()
 				return -1;
 			}
 
-			Mutex.Lock();
 			if (ShouldIgnoreNextToken)
 			{
-				Mutex.Unlock();
 				continue;
 			}
-			Mutex.Unlock();
 
 			Pipeline->postGenerate(Result);
 			if (!Result.IsSuccess())
@@ -489,13 +528,10 @@ uint32 FGenThread::Run()
 			}
 		}
 
-		Mutex.Lock();
 		if (ShouldIgnoreNextToken)
 		{
-			Mutex.Unlock();
 			continue;
 		}
-		Mutex.Unlock();
 
 		int32 newToken;
 		if (Pipeline != nullptr)
@@ -509,18 +545,16 @@ uint32 FGenThread::Run()
 		EncodedTokens.Add(newToken);
 		NbTokensSinceLastRefresh++;
 
-
 		//TryInsertTokenGroup();
 
 		if (!bShutdown)
 		{
-			Mutex.Lock();
 			if (ShouldIgnoreNextToken)
 			{
-				Mutex.Unlock();
 				continue;
 			}
 
+			Mutex.Lock();
 			OnGenerated.ExecuteIfBound(newToken);
 			Mutex.Unlock();
 		}
@@ -550,23 +584,27 @@ void FGenThread::Exit()
 
 }
 
-void FGenThread::Stop() 
+void FGenThread::Stop()
 {
+	if (Semaphore)
+	{
+		Semaphore->Trigger();
+	}
 	bShutdown = true;
 }
 
 void FGenThread::RemoveCacheAfterTickInternal()
 {
-	Pipeline->batchUnwind(Batch2, CacheTickToRemove);
-	OnCacheRemoved.ExecuteIfBound(CacheTickToRemove);
+	int32 CacheTickToRemoveValue = CacheTickToRemove.GetValue();
+	Pipeline->batchRewind(Batch2, CacheTickToRemoveValue);
+	OnCacheRemoved.ExecuteIfBound(CacheTickToRemoveValue);
 }
 
 void FGenThread::RemoveCacheAfterTick(int32 GenLibTick)
 {
-	Mutex.Lock();
+	CacheTickToRemove.Set(GenLibTick);
 	ShouldIgnoreNextToken = true;
-	CacheTickToRemove = GenLibTick;
-	Mutex.Unlock();
+	Semaphore->Trigger();
 }
 
 //void FGenThread::SetSearchStrategy(void* InSearchStrategyData, TSearchStrategy InSearchStrategy)
