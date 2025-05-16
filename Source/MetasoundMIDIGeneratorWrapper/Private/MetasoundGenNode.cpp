@@ -224,10 +224,12 @@ namespace Metasound
 				return;
 			}
 
+			Generator->ClockLock.Lock();
 			Generator->CurrentTick = Outputs.MidiClock->GetCurrentHiResTick();
 			Outputs.MidiClock->GetDrivingMidiPlayCursorMgr()->LockForMidiDataChanges();
 			Generator->DecodeTokens();
 			Outputs.MidiClock->GetDrivingMidiPlayCursorMgr()->MidiDataChangeComplete(FMidiPlayCursorMgr::EMidiChangePositionCorrectMode::MaintainTick);
+			Generator->ClockLock.Lock();
 
 			Outputs.MidiStream->PrepareBlock();
 
@@ -379,6 +381,11 @@ namespace Metasound
 			MidiEvent.CurrentMidiTick = Tick;
 			MidiEvent.TrackIndex = TrackIndex;
 			Outputs.MidiStream->AddMidiEvent(MidiEvent);
+
+			if (Status == 144 && Data1 == 70)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("=== Note played at tick %d / Clock current: %d ==="), Tick, Outputs.MidiClock->GetCurrentHiResTick());
+			}
 		}
 	}
 

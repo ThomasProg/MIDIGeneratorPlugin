@@ -9,10 +9,10 @@
 
 DECLARE_CYCLE_STAT(TEXT("GenThread"), STAT_GenThread, STATGROUP_Game);
 
-DECLARE_DELEGATE_OneParam(FOnGenerated, int32);
-DECLARE_DELEGATE_OneParam(FOnSearch, const struct SearchArgs& args);
-DECLARE_DELEGATE(FOnInit);
-DECLARE_DELEGATE_OneParam(FOnCacheRemoved, int32 libTick);
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnGenerated, int32 newToken);
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnSearch, const struct SearchArgs& args);
+DECLARE_MULTICAST_DELEGATE(FOnInit);
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnCacheRemoved, int32 libTick);
 
 //class FGenThread;
 //class FMIDIGeneratorProxy;
@@ -90,15 +90,15 @@ public:
 	static FString RelativeToAbsoluteContentPath(const FString& BaseStr);
 
 	//void SetSearchStrategy(void* SearchStrategyData, TSearchStrategy SearchStrategy);
-	void SetSearchStrategy(FOnSearch InOnSearch);
-	void SetOnGenerated(FOnGenerated InOnGenerated);
-	void SetOnInit(FOnInit InOnInit);
+	void SetSearchStrategy(TFunction<void(const struct SearchArgs& args)> InOnSearch);
+	void SetOnGenerated(TFunction<void(int32 NewToken)> InOnGenerated);
+	void SetOnInit(TFunction<void()> InOnInit);
 
 	// BEGIN FRunnable 
 	virtual void Stop() override;
 	// END FRunnable
 
-	void RemoveCacheAfterTick(int32 GenLibTick);
+	void RemoveCacheAfterTick(int32 GenLibTick, float Ms = -1.0);
 
 protected:
 	// BEGIN FRunnable 
@@ -152,14 +152,15 @@ private:
 	////~ End IAudioProxyDataFactory Interface.
 
 public:
-	FThreadSafeBool ShouldIgnoreNextToken = false;
-	FThreadSafeCounter CacheTickToRemove = 0;
+	std::atomic_bool ShouldIgnoreNextToken = false;
+	int32_t CacheTickToRemove = 0;
+	float CacheMsToRemove = 0;
 
 	FOnCacheRemoved OnCacheRemoved;
 
 	FEvent* Semaphore = nullptr;
 
-	FThreadSafeCounter CurrentTick;
+	std::atomic_int32_t CurrentTick;
 	int32 NbMinTicksAhead = 200;
 	int32 NbMaxTicksAhead = 400;
 

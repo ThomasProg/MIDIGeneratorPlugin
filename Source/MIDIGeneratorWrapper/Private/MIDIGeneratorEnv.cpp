@@ -137,7 +137,7 @@ void FMIDIGeneratorEnv::StartGeneration()
 
 		MidiDataProxy = MakeShared<FMidiFileProxy, ESPMode::ThreadSafe>(MidiFileData);
 
-		GenThread->SetOnGenerated(FOnGenerated::CreateLambda([this](int32 NewToken)
+		GenThread->SetOnGenerated([this](int32 NewToken)
 			{
 				nbEncodedTokensSinceRegen++;
 				bShouldUpdateTokens = true;
@@ -163,14 +163,14 @@ void FMIDIGeneratorEnv::StartGeneration()
 				int32 LastToken = *(outDecodedTokensEnd - 1);
 
 				UpdateCurrentRangeGroup(LastToken);
-			}));
+			});
 
-		GenThread->SetOnInit(FOnInit::CreateLambda([this]()
+		GenThread->SetOnInit([this]()
 			{
 				SetFilter();
-			}));
+			});
 
-		GenThread->OnCacheRemoved.BindLambda([this](int32 libTick)
+		GenThread->OnCacheRemoved.AddLambda([this](int32 libTick)
 			{
 				GenerationHistory* History = GenThread->GetPipeline()->getHistory(GenThread->GetBatch());
 				const struct Note* OutNotes;
@@ -186,41 +186,43 @@ void FMIDIGeneratorEnv::StartGeneration()
 				UpdateCurrentRangeGroup(decodedTokens[decodedTokensSize - 1]);
 
 
-				GenThread->GetPipeline()->setSequencerUserData(GenThread->GetBatch(), this);
-				GenThread->GetPipeline()->addCallbackToSequencer(GenThread->GetBatch(), libTick, [](int32_t genLibTick, void* userData)
-					{
-						FMIDIGeneratorEnv& env = *(FMIDIGeneratorEnv*)userData;
+				//GenThread->GetPipeline()->setSequencerUserData(GenThread->GetBatch(), this);
+				//callbackHash = GenThread->GetPipeline()->addCallbackToSequencer(GenThread->GetBatch(), libTick, [](int32_t hash, int32_t genLibTick, void* userData)
+				//	{
+				//		FMIDIGeneratorEnv& env = *(FMIDIGeneratorEnv*)userData;
 
-						env.hasRegen = true;
-						env.nbEncodedTokensSinceRegen = 0;
-						env.nbAddedSinceLastTimeshift = 0;
-						env.nbAddedSinceLast = 0;
+				//		env.hasRegen = true;
+				//		env.nbEncodedTokensSinceRegen = 0;
+				//		env.nbAddedSinceLastTimeshift = 0;
+				//		env.nbAddedSinceLast = 0;
 
 
 
-						GenerationHistory* History = env.GenThread->GetPipeline()->getHistory(env.GenThread->GetBatch());
+				//		GenerationHistory* History = env.GenThread->GetPipeline()->getHistory(env.GenThread->GetBatch());
 
-						Note* outNotes;
-						size_t outLength;
-						generationHistory_getNotesMut(History, &outNotes, &outLength);
+				//		Note* outNotes;
+				//		size_t outLength;
+				//		generationHistory_getNotesMut(History, &outNotes, &outLength);
 
-						//Note newNote;
-						//newNote = outNotes[outLength - 1];
-						//newNote.tick = genLibTick;
-						//newNote.pitch = 90;
-						//generationHistory_addStandaloneNote(History, &newNote);
-						//newNote.pitch = 40;
-						//generationHistory_addStandaloneNote(History, &newNote);
+				//		//Note newNote;
+				//		//newNote = outNotes[outLength - 1];
+				//		//newNote.tick = genLibTick;
+				//		//newNote.pitch = 90;
+				//		//generationHistory_addStandaloneNote(History, &newNote);
+				//		//newNote.pitch = 40;
+				//		//generationHistory_addStandaloneNote(History, &newNote);
 
-						Note newNote;
-						newNote = outNotes[outLength - 1];
-						newNote.tick = genLibTick;
-						generationHistory_addStandaloneNote(History, &newNote);
-						newNote.pitch += 4;
-						generationHistory_addStandaloneNote(History, &newNote);
-						newNote.pitch += 3;
-						generationHistory_addStandaloneNote(History, &newNote);
-					});
+				//		Note newNote;
+				//		newNote = outNotes[outLength - 1];
+				//		newNote.pitch = FMath::Max(newNote.pitch, env.LastFireworkPitch+4);
+				//		newNote.tick = genLibTick;
+				//		env.LastFireworkPitch = newNote.pitch;
+				//		generationHistory_addStandaloneNote(History, &newNote);
+				//		newNote.pitch += 4;
+				//		generationHistory_addStandaloneNote(History, &newNote);
+				//		newNote.pitch += 3;
+				//		generationHistory_addStandaloneNote(History, &newNote);
+				//	});
 
 				//generationHistory_setOnNoteAddedData(History, this);
 				//generationHistory_setOnNoteAdded(History, [](void* userData)
@@ -255,7 +257,7 @@ void FMIDIGeneratorEnv::StartGeneration()
 void FMIDIGeneratorEnv::StopGeneration()
 {
 	GenThread->Stop();
-	GenThread->SetOnGenerated(nullptr);
+	//GenThread->SetOnGenerated(nullptr);
 }
 
 void FMIDIGeneratorEnv::SetFilter()
@@ -312,7 +314,7 @@ void FMIDIGeneratorEnv::SetFilter()
 
 
 
-	GenThread->SetSearchStrategy(FOnSearch::CreateLambda([this](const SearchArgs& args)
+	GenThread->SetSearchStrategy([this](const SearchArgs& args)
 		{
 			//MidiTokenizerHandle tok = GenThread->GetTok();
 
@@ -408,10 +410,9 @@ void FMIDIGeneratorEnv::SetFilter()
 				int outToken = topPSampling(args.logitsTensor, LogitIndicesData, LogitIndicesData + nbTopTokenSize, 0.5);
 				args.outNextTokens[0] = outToken;
 			}
-		}));
+		});
 }
-double MaxTime = 0.0;
-int nTimes = 0;
+int prevCounter = 0;
 void FMIDIGeneratorEnv::DecodeTokens()
 {
 	struct Args
@@ -435,6 +436,11 @@ void FMIDIGeneratorEnv::DecodeTokens()
 			Velocity += 60 - NoteNumber;
 		}
 
+		if (NoteNumber == 70)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("=== Adding Event 70 ==="));
+		}
+
 		int32 Track = 0;
 
 		//int32 CurrentTick = 0;// args.self->Outputs.MidiClock->GetCurrentHiResTick();
@@ -454,6 +460,11 @@ void FMIDIGeneratorEnv::DecodeTokens()
 		//	Tick = args.self->CacheRemoveTick;
 		//}
 
+		if (NoteNumber != 70)
+		{
+			return;
+		}
+
 		if (args.self->MidiFileData->Tracks[0].GetUnsortedEvents().IsEmpty() or Tick >= args.self->MidiFileData->Tracks[0].GetEvents().Last().GetTick())
 		{
 			//UE_LOG(LogTemp, Warning, TEXT("New Note Tick : %d / CurrentTick : %d"), Tick, CurrentTick);
@@ -466,6 +477,11 @@ void FMIDIGeneratorEnv::DecodeTokens()
 			FMidiMsg Msg{ FMidiMsg::CreateNoteOn(Channel - 1, NoteNumber, Velocity) }; 
 			args.self->MidiFileData->Tracks[0].AddEvent(FMidiEvent(Tick, Msg));
 
+			if (NoteNumber == 70)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("=== Added without Sort ==="));
+			}
+
 			//args.self->regenTick++;
 
 			//int32 Tick2 = (newNote.tick+50) * 100 + args.self->AddedTicks;
@@ -473,6 +489,18 @@ void FMIDIGeneratorEnv::DecodeTokens()
 			//args.self->MidiFileData->Tracks[0].AddEvent(FMidiEvent(Tick2, Msg2));
 
 			//args.self->MidiFileData->GetLastEventTick();
+		}
+		else // if (NoteNumber == 70)// SORTS : @TODO : opti sort
+		{
+			args.LastTick = Tick;
+
+			FMidiMsg Msg{ FMidiMsg::CreateNoteOn(Channel - 1, NoteNumber, Velocity) };
+			//args.self->MidiFileData->Tracks[0].ClearEventsAfter(Tick, false);
+			//args.self->MidiFileData->Tracks[0].ClearEventsBefore(Tick, false);
+			args.self->MidiFileData->Tracks[0].AddEvent(FMidiEvent(Tick, Msg));
+			args.self->MidiFileData->Tracks[0].Sort();
+
+			UE_LOG(LogTemp, Warning, TEXT("=== Added with Sort ==="));
 		}
 
 	};
@@ -487,6 +515,20 @@ void FMIDIGeneratorEnv::DecodeTokens()
 	generationHistory_getNotes(History, &OutNotes, &OutLength);
 
 	{
+		int counter = 0;
+		for (int i = 0; i < OutLength; i++)
+		{
+			if (OutNotes[i].pitch == 70)
+			{
+				counter++;
+			}
+		}
+		if (counter != prevCounter)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("= Nb Pitch 70 : %d ="), counter);
+			prevCounter = counter;
+		}
+
 		while (nextNoteIndexToProcess < OutLength)
 		{
 			onNote(&args, OutNotes[nextNoteIndexToProcess]);
@@ -512,7 +554,7 @@ void FMIDIGeneratorEnv::DecodeTokens()
 	//UE_LOG(LogTemp, Warning, TEXT("LastNote Lib: %d -> UE: %f"), OutNotes[OutLength-1].tick, GenLibTickToUETick(OutNotes[OutLength - 1].tick));
 	//UE_LOG(LogTemp, Warning, TEXT("---"));
 
-	GenThread->CurrentTick.Set(genLibTick);
+	GenThread->CurrentTick = genLibTick;
 
 	// @TODO : thread safe
 	if (GenThread->ShouldResumeGeneration())
@@ -536,6 +578,22 @@ float FMIDIGeneratorEnv::GenLibTickToUETick(int32 tick)
 	return tick * 100 + AddedTicks;
 }
 
+void FMIDIGeneratorEnv::RegenerateCacheFromTick(int32 UETick)
+{
+	//float CurrentTimeMs = Clock->GetCurrentHiResMs();
+	//callbackTime = CurrentTimeMs + DelayInMs;
+	//float UETick = MidiFileData->SongMaps.GetTempoMap().MsToTick(CurrentTimeMs);
+	//CacheRemoveTick = Tick;
+	int32 genLibTick = UETickToGenLibTick(UETick);
+	GenThread->RemoveCacheAfterTick(genLibTick);
+
+	ClockLock.Lock();
+	Clock->GetDrivingMidiPlayCursorMgr()->LockForMidiDataChanges();
+	MidiFileData->Tracks[0].ClearEventsAfter(int32(UETick), true);
+	Clock->GetDrivingMidiPlayCursorMgr()->MidiDataChangeComplete(FMidiPlayCursorMgr::EMidiChangePositionCorrectMode::MaintainTick);
+	ClockLock.Unlock();
+}
+
 void FMIDIGeneratorEnv::RegenerateCacheAfterDelay(float DelayInMs)
 {
 	if (Clock == nullptr)
@@ -543,149 +601,42 @@ void FMIDIGeneratorEnv::RegenerateCacheAfterDelay(float DelayInMs)
 		return;
 	}
 
-	{
-		//regenTick = 0;
-		//regenNbPitches = 0;
-		//hasRegen = true;
-		//nbEncodedTokensSinceRegen = 0;
-		//nbAddedSinceLastTimeshift = 0;
-		//nbAddedSinceLast = 0;
-		GenerationHistory* History = GenThread->GetPipeline()->getHistory(GenThread->GetBatch());
-
-		//MidiTokenizerHandle Tok = GenThread->GetTok().GetTokenizer();
-		//pitch1 = findPitchToken(Tok, 58);
-		//pitch2 = findPitchToken(Tok, 60);
-		//pitch3 = findPitchToken(Tok, 62);
-
-		//generationHistory_setOnNoteAddedData(History, this);
-		//generationHistory_setOnNoteAdded(History, [](void* userData)
-		//{
-		//	FMIDIGeneratorEnv& env = * (FMIDIGeneratorEnv*)userData;
-
-		//	GenerationHistory* History = env.GenThread->GetPipeline()->getHistory(env.GenThread->GetBatch());
-
-		//	Note* outNotes;
-		//	size_t outLength;
-		//	generationHistory_getNotesMut(History, &outNotes, &outLength);
-
-		//	Note newNote;
-		//	newNote = outNotes[outLength - 1];
-		//	newNote.pitch = 90;
-		//	generationHistory_addStandaloneNote(History, &newNote);
-		//	newNote.pitch = 40;
-		//	generationHistory_addStandaloneNote(History, &newNote);
-
-		//	generationHistory_setOnNoteAddedData(History, nullptr);
-		//	generationHistory_setOnNoteAdded(History, nullptr);
-		//});
-
-		//generationHistory_setOnEncodedTokenAddedData(History, this);
-		//generationHistory_setOnEncodedTokenAdded(History, [](OnAddTokensArgs* args)
-		//{
-		//	const MidiTokenizer& tokenizer = args->getTokenizer();
-		//	FMIDIGeneratorEnv& env = args->getUserData<FMIDIGeneratorEnv>();
-
-		//	//args->addDecodedToken(env.pitch1);
-		//	//args->addDecodedToken(env.pitch2);
-		//	//args->addDecodedToken(env.pitch3);
-
-		//	const int32_t* outDecodedTokensBegin;
-		//	const int32_t* outDecodedTokensEnd;
-		//	tokenizer_decodeTokenFast(&tokenizer, args->getNewEncodedToken(), &outDecodedTokensBegin, &outDecodedTokensEnd);
-
-		//	while (outDecodedTokensBegin != outDecodedTokensEnd)
-		//	{
-		//		int32 decodedToken = *outDecodedTokensBegin;
-
-		//		//if (isPitch(&tokenizer, decodedToken))
-		//		//{
-		//		//	//env.regenNbPitches++;
-
-		//		//	int32 pitch = getPitch(&tokenizer, decodedToken);
-
-		//		//	// Triad
-		//		//	args->addDecodedToken(findPitchToken(&tokenizer, 40));
-		//		//	//args->addDecodedToken(findPitchToken(&tokenizer, pitch + 4));
-		//		//	//args->addDecodedToken(findPitchToken(&tokenizer, pitch + 7));
-		//		//	//args->addDecodedToken(findPitchToken(&tokenizer, pitch + 2));
-		//		//	//args->addDecodedToken(findPitchToken(&tokenizer, pitch + 9));
-		//		//	//args->addDecodedToken(findPitchToken(&tokenizer, pitch + 9));
-		//		//	//args->addDecodedToken(findPitchToken(&tokenizer, 80));
-		//		//	//args->addDecodedToken(findPitchToken(&tokenizer, 90));
-		//		//	//args->addDecodedToken(findPitchToken(&tokenizer, 50));
-		//		//}
-
-		//		if (env.nbAddedSinceLastTimeshift == 0)
-		//		{
-		//			args->addDecodedToken(findPitchToken(&tokenizer, 40));
-		//			env.nbAddedSinceLastTimeshift++;
-		//			env.nbAddedSinceLast++;
-		//		}
-
-		//		if (isTimeShift(&tokenizer, decodedToken))
-		//		{
-		//			env.nbAddedSinceLastTimeshift = 0;
-		//		}
-		//		//{
-		//		//	args->addDecodedToken(*outDecodedTokensBegin);
-		//		//}
-		//		args->addDecodedToken(*outDecodedTokensBegin);
-		//		//	args->addDecodedToken(findPitchToken(&tokenizer, 90));
-		//		//	args->addDecodedToken(*outDecodedTokensBegin);
-		//		//	args->addDecodedToken(findPitchToken(&tokenizer, 90));
-		//		//	args->addDecodedToken(*outDecodedTokensBegin);
-		//		//}
-
-		//		++outDecodedTokensBegin;
-		//	}
-
-		//	//if (env.regenNbPitches < 5)
-		//	//{
-		//	//	return;
-		//	//}
-		//	if (env.nbAddedSinceLast < 3)
-		//	{
-		//		return;
-		//	}
-		//	GenerationHistory* History = env.GenThread->GetPipeline()->getHistory(env.GenThread->GetBatch());
-		//	generationHistory_setOnEncodedTokenAdded(History, generationHistory_getDefaultOnEncodedTokenAdded());
-		//});
-	}
-
 	float CurrentTimeMs = Clock->GetCurrentHiResMs();
-	float Tick = MidiFileData->SongMaps.GetTempoMap().MsToTick(CurrentTimeMs + DelayInMs);
+	callbackTime = CurrentTimeMs + DelayInMs;
+	float Tick = MidiFileData->SongMaps.GetTempoMap().MsToTick(callbackTime);
 	CacheRemoveTick = Tick;
 	int32 genLibTick = UETickToGenLibTick(Tick);
 
-
-
-
 	GenThread->RemoveCacheAfterTick(genLibTick);
 
+	ClockLock.Lock();
 	Clock->GetDrivingMidiPlayCursorMgr()->LockForMidiDataChanges();
 	MidiFileData->Tracks[0].ClearEventsAfter(int32(Tick), true);
 	Clock->GetDrivingMidiPlayCursorMgr()->MidiDataChangeComplete(FMidiPlayCursorMgr::EMidiChangePositionCorrectMode::MaintainTick);
-	
-	//GenerationHistory* History = GenThread->GetPipeline()->getHistory(GenThread->GetBatch());
+	ClockLock.Unlock();
+}
 
-	//GenThread->GenerationMutex.Lock();
-	//GenThread->shouldIgnoreNextToken = true;
-	//generationHistory_removeAfterTick(History, genLibTick);
+void FMIDIGeneratorEnv::SetTempo(float InTempo)
+{
+	if (Clock == nullptr)
+	{
+		return;
+	}
 
-	//const struct Note* OutNotes;
-	//size_t OutLength;
-	//generationHistory_getNotes(History, &OutNotes, &OutLength);
+	ClockLock.Lock();
+	Clock->GetDrivingMidiPlayCursorMgr()->LockForMidiDataChanges();
+	MidiFileData->AddTempoChange(0, Clock->GetCurrentMidiTick(), InTempo);
+	Clock->GetDrivingMidiPlayCursorMgr()->MidiDataChangeComplete(FMidiPlayCursorMgr::EMidiChangePositionCorrectMode::MaintainTick);
+	ClockLock.Unlock();
 
-	//nextNoteIndexToProcess = FMath::Min(nextNoteIndexToProcess, int32(OutLength));
-
-	//TokenHistoryHandle decodedTokenHistory = getDecodedTokensHistory(History);
-	//const int32* decodedTokens;
-	//int32 decodedTokensSize;
-	//tokenHistory_getTokens(decodedTokenHistory, &decodedTokens, &decodedTokensSize);
-	//UpdateCurrentRangeGroup(decodedTokens[decodedTokensSize - 1]);
-
-	//MidiFileData->Tracks[0].ClearEventsAfter(int32(Tick), true);
-	//GenThread->GenerationMutex.Unlock();
+	if (callbackHash != -1)
+	{
+		float Tick = MidiFileData->SongMaps.GetTempoMap().MsToTick(callbackTime);
+		CacheRemoveTick = Tick;
+		int32 genLibTick = UETickToGenLibTick(Tick);
+		GenThread->GetPipeline()->updateSequencerCallbackTick(GenThread->GetBatch(), callbackHash, genLibTick);
+		//RegenerateCacheAfterDelay()
+	}
 }
 
 UMIDIGeneratorEnv::UMIDIGeneratorEnv()
@@ -731,33 +682,7 @@ void UMIDIGeneratorEnv::SetTokens(const TArray<int32>& InTokens)
 
 void UMIDIGeneratorEnv::SetTempo(float InTempo)
 {
-	const HarmonixMetasound::FMidiClock* Clock = Generator->MidiGenerator->Clock;
-	if (Clock == nullptr)
-	{
-		return;
-	}
-	int32 CurrentTick = Clock->GetCurrentMidiTick();
-
-	Clock->GetDrivingMidiPlayCursorMgr()->LockForMidiDataChanges();
-	TSharedPtr<struct FMidiFileData>& MidiFileData = Generator->MidiGenerator->MidiFileData;
-	MidiFileData->AddTempoChange(0, CurrentTick, InTempo);
-	Clock->GetDrivingMidiPlayCursorMgr()->MidiDataChangeComplete(FMidiPlayCursorMgr::EMidiChangePositionCorrectMode::MaintainTick);
-
-	//Clock.time
-
-	//MidiFileData->SongMaps.GetTempoMap().MsToTick()
-
-
-
-	//->AddTempoChange() = InTempo;
-
-	//int32 CurrentTempo = 120;
-	//int32 CurrentTimeSigNum = 4;
-	//int32 CurrentTimeSigDenom = 4;
-	//MidiFileData = HarmonixMetasound::FMidiClock::MakeClockConductorMidiData(CurrentTempo, CurrentTimeSigNum, CurrentTimeSigDenom);
-
-	//MidiFileData->MidiFileName = "Generated";
-	//MidiFileData->TicksPerQuarterNote = 16;
+	Generator->MidiGenerator->SetTempo(InTempo);
 }
 
 void UMIDIGeneratorEnv::RegenerateCacheAfterDelay(float DelayInMs)

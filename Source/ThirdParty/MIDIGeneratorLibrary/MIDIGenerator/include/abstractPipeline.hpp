@@ -75,7 +75,10 @@ public:
     virtual void createHistory(const MidiTokenizer& tokenizer) = 0;
     virtual class GenerationHistory* getHistory(AutoRegressiveBatchHandle batchHandle) const = 0;
 
-    using Callback = void(*)(int32_t tick, void* userData);
-    virtual void addCallbackToSequencer(AutoRegressiveBatchHandle batchHandle, int32_t tick, Callback callback) {}
+    using Callback = void(*)(int32_t hash, int32_t tick, void* userData);
+    // Returns hash
+    virtual int32_t addCallbackToSequencer(AutoRegressiveBatchHandle batchHandle, int32_t tick, Callback callback) { return 0; }
+    virtual void removeCallbackFromSequencer(AutoRegressiveBatchHandle batchHandle, int32_t hash) {}
+    virtual void updateSequencerCallbackTick(AutoRegressiveBatchHandle batchHandle, int32_t hash, int32_t tick) {}
     virtual void setSequencerUserData(AutoRegressiveBatchHandle batchHandle, void* userData) {}
 };

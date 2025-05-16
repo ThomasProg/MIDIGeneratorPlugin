@@ -125,7 +125,7 @@ bool FGenThread::Init()
 				//TSearchStrategy SearchStrategy = GenThread->SearchStrategy;
 				GenThread->Mutex.Unlock();
 
-				OnSearch.Execute(args);
+				OnSearch.Broadcast(args);
 
 				//(*SearchStrategy)(args, SearchStrategyData);
 			});
@@ -141,14 +141,14 @@ bool FGenThread::Init()
 				GenThread->Mutex.Lock();
 				FOnSearch OnSearch = GenThread->OnSearch;
 				GenThread->Mutex.Unlock();
-				OnSearch.Execute(args);
+				OnSearch.Broadcast(args);
 			});
 
 		Pipeline->createHistory(*Tokenizer->GetTokenizer()->GetTokenizer());
 	}
 
 
-	OnInit.ExecuteIfBound();
+	OnInit.Broadcast();
 
 
 	//runInstance_setSearchStrategyData(runInstance, SearchStrategyData);
@@ -371,7 +371,7 @@ bool FGenThread::ShouldResumeGeneration() const
 	size_t outLength;
 	TokenHistoryHandle enchist = getEncodedTokensHistory(History);
 	generationHistory_getNotes(History, &outNotes, &outLength);
-	return outNotes[outLength - 1].tick < CurrentTick.GetValue() + NbMinTicksAhead;
+	return outNotes[outLength - 1].tick < CurrentTick + NbMinTicksAhead;
 }
 
 bool FGenThread::ShouldSleep() const
@@ -384,7 +384,7 @@ bool FGenThread::ShouldSleep() const
 	{
 		return false;
 	}
-	return outNotes[outLength - 1].tick >= CurrentTick.GetValue() + NbMaxTicksAhead;
+	return outNotes[outLength - 1].tick >= CurrentTick + NbMaxTicksAhead;
 }
 
 uint32 FGenThread::Run()
@@ -420,7 +420,7 @@ uint32 FGenThread::Run()
 		GenerationHistory* History = Pipeline->getHistory(Batch2);
 		generationHistory_convert(History);
 
-		if (!ShouldIgnoreNextToken && ShouldSleep())
+		if (!ShouldIgnoreNextToken.load(std::memory_order_acquire) && ShouldSleep())
 		{
 			Semaphore->Wait();
 		}
@@ -463,7 +463,7 @@ uint32 FGenThread::Run()
 		}
 		Mutex.Unlock();
 
-		if (ShouldIgnoreNextToken)
+		if (ShouldIgnoreNextToken.load(std::memory_order_acquire))
 		{
 			ShouldIgnoreNextToken = false;
 			RemoveCacheAfterTickInternal();
@@ -486,7 +486,7 @@ uint32 FGenThread::Run()
 				return -1;
 			}
 
-			if (ShouldIgnoreNextToken)
+			if (ShouldIgnoreNextToken.load(std::memory_order_acquire))
 			{
 				continue;
 			}
@@ -528,7 +528,7 @@ uint32 FGenThread::Run()
 			}
 		}
 
-		if (ShouldIgnoreNextToken)
+		if (ShouldIgnoreNextToken.load(std::memory_order_acquire))
 		{
 			continue;
 		}
@@ -549,13 +549,13 @@ uint32 FGenThread::Run()
 
 		if (!bShutdown)
 		{
-			if (ShouldIgnoreNextToken)
+			if (ShouldIgnoreNextToken.load(std::memory_order_acquire))
 			{
 				continue;
 			}
 
 			Mutex.Lock();
-			OnGenerated.ExecuteIfBound(newToken);
+			OnGenerated.Broadcast(newToken);
 			Mutex.Unlock();
 		}
 	}
@@ -595,15 +595,16 @@ void FGenThread::Stop()
 
 void FGenThread::RemoveCacheAfterTickInternal()
 {
-	int32 CacheTickToRemoveValue = CacheTickToRemove.GetValue();
+	int32 CacheTickToRemoveValue = CacheTickToRemove;
 	Pipeline->batchRewind(Batch2, CacheTickToRemoveValue);
-	OnCacheRemoved.ExecuteIfBound(CacheTickToRemoveValue);
+	OnCacheRemoved.Broadcast(CacheTickToRemoveValue);
 }
 
-void FGenThread::RemoveCacheAfterTick(int32 GenLibTick)
+void FGenThread::RemoveCacheAfterTick(int32 GenLibTick, float Ms)
 {
-	CacheTickToRemove.Set(GenLibTick);
-	ShouldIgnoreNextToken = true;
+	CacheTickToRemove = GenLibTick;
+	CacheMsToRemove = Ms;
+	ShouldIgnoreNextToken.store(true, std::memory_order_release);
 	Semaphore->Trigger();
 }
 
@@ -615,24 +616,24 @@ void FGenThread::RemoveCacheAfterTick(int32 GenLibTick)
 //	Mutex.Unlock();
 //}
 
-void FGenThread::SetSearchStrategy(FOnSearch InOnSearch)
+void FGenThread::SetSearchStrategy(TFunction<void(const struct SearchArgs& args)> InOnSearch)
 {
 	Mutex.Lock();
-	OnSearch = InOnSearch;
+	OnSearch.AddLambda([OnSearchParam = MoveTemp(InOnSearch)](const struct SearchArgs& args) { OnSearchParam(args); });
 	Mutex.Unlock();
 }
 
-void FGenThread::SetOnGenerated(FOnGenerated InOnGenerated)
+void FGenThread::SetOnGenerated(TFunction<void(int32 NewToken)> InOnGenerated)
 {
 	Mutex.Lock();
-	OnGenerated = InOnGenerated;
+	OnGenerated.AddLambda([OnGeneratedParam = MoveTemp(InOnGenerated)](int32 newToken) { OnGeneratedParam(newToken); });
 	Mutex.Unlock();
 }
 
-void FGenThread::SetOnInit(FOnInit InOnInit)
+void FGenThread::SetOnInit(TFunction<void()> InOnInit)
 {
 	Mutex.Lock();
-	OnInit = InOnInit;
+	OnInit.AddLambda([InOnInitParam = MoveTemp(InOnInit)]() { InOnInitParam(); });
 	Mutex.Unlock();
 }
 

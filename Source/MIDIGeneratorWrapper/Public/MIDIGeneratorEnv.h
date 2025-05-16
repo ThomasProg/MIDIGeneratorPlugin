@@ -91,20 +91,20 @@ public:
 	RangeGroupHandle AllRangeGroup;
 
 	const HarmonixMetasound::FMidiClock* Clock = nullptr;
+	FCriticalSection ClockLock;
 
 
 	bool hasRegen = false;
 	int32 nbEncodedTokensSinceRegen = 0;
 	int nbAddedSinceLastTimeshift = 0;
 	int nbAddedSinceLast = 0;
-	//int32 hasRegenCounter = 0;
-	//int32 regenTick = 0;
-	//int32 regenNbPitches = 0;
-	float CacheRemoveTick = 0;
 
-	//int32 pitch1;
-	//int32 pitch2;
-	//int32 pitch3;
+	float CacheRemoveTick = 0;
+	int32 LastFireworkPitch = 40;
+
+
+	int32 callbackHash = -1;
+	float callbackTime = 0;
 
 public:
 	~FMIDIGeneratorEnv();
@@ -126,6 +126,9 @@ public:
 
 	int32 UETickToGenLibTick(float tick);
 	float GenLibTickToUETick(int32 tick);
+
+	void SetTempo(float InTempo);
+	void RegenerateCacheFromTick(int32 UETick);
 };
 
 
