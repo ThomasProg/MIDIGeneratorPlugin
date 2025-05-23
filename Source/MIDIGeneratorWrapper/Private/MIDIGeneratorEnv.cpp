@@ -448,22 +448,22 @@ void FMIDIGeneratorEnv::DecodeTokens()
 
 		int32 Tick = FMath::RoundToInt32(float(args.self->GenLibTickToUETick(newNote.tick)));
 
-		if (Tick < CurrentTick)
-		{
-			args.self->AddedTicks += CurrentTick - Tick;
-			Tick = CurrentTick;
-			//UE_LOG(LogTemp, Warning, TEXT("Tick < CurrentTick: %d < %d"), CurrentTick, Tick);
-		}
+		//if (Tick < CurrentTick)
+		//{
+		//	UE_LOG(LogTemp, Warning, TEXT("Tick < CurrentTick: %d < %d"), CurrentTick, Tick);
+		//	args.self->AddedTicks += CurrentTick - Tick;
+		//	Tick = CurrentTick;
+		//}
 
 		//if (args.self->regenTick < 3)
 		//{
 		//	Tick = args.self->CacheRemoveTick;
 		//}
 
-		if (NoteNumber != 70)
-		{
-			return;
-		}
+		//if (NoteNumber != 70)
+		//{
+		//	return;
+		//}
 
 		if (args.self->MidiFileData->Tracks[0].GetUnsortedEvents().IsEmpty() or Tick >= args.self->MidiFileData->Tracks[0].GetEvents().Last().GetTick())
 		{
@@ -479,7 +479,7 @@ void FMIDIGeneratorEnv::DecodeTokens()
 
 			if (NoteNumber == 70)
 			{
-				UE_LOG(LogTemp, Warning, TEXT("=== Added without Sort ==="));
+				UE_LOG(LogTemp, Warning, TEXT("=== Added without Sort for : %d==="), Tick);
 			}
 
 			//args.self->regenTick++;

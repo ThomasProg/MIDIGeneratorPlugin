@@ -229,7 +229,7 @@ namespace Metasound
 			Outputs.MidiClock->GetDrivingMidiPlayCursorMgr()->LockForMidiDataChanges();
 			Generator->DecodeTokens();
 			Outputs.MidiClock->GetDrivingMidiPlayCursorMgr()->MidiDataChangeComplete(FMidiPlayCursorMgr::EMidiChangePositionCorrectMode::MaintainTick);
-			Generator->ClockLock.Lock();
+			Generator->ClockLock.Unlock();
 
 			Outputs.MidiStream->PrepareBlock();
 

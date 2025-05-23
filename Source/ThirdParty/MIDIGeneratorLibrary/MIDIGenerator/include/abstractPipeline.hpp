@@ -21,9 +21,11 @@ public:
 class API_EXPORT AOnnxModel : public AModel
 {
 protected:
-    UniquePtr<Ort::Session> session; // TODO : only put accessor instead?
+    // UniquePtr<Ort::Session> session; // TODO : only put accessor instead?
+    Ort::Session* session = nullptr;
 
 public:
+    ~AOnnxModel();
     CResult loadOnnxModel(const Ort::Env& env, const char* modelPath);
     void generate(const Ort::IoBinding& ioBindings, CppResult& outResult);
 
@@ -77,7 +79,7 @@ public:
 
     using Callback = void(*)(int32_t hash, int32_t tick, void* userData);
     // Returns hash
-    virtual int32_t addCallbackToSequencer(AutoRegressiveBatchHandle batchHandle, int32_t tick, Callback callback) { return 0; }
+    virtual int32_t addCallbackToSequencer(AutoRegressiveBatchHandle batchHandle, int32_t tick, Callback callback, Callback undo) { return 0; }
     virtual void removeCallbackFromSequencer(AutoRegressiveBatchHandle batchHandle, int32_t hash) {}
     virtual void updateSequencerCallbackTick(AutoRegressiveBatchHandle batchHandle, int32_t hash, int32_t tick) {}
     virtual void setSequencerUserData(AutoRegressiveBatchHandle batchHandle, void* userData) {}

@@ -161,7 +161,7 @@ public:
 	FEvent* Semaphore = nullptr;
 
 	std::atomic_int32_t CurrentTick;
-	int32 NbMinTicksAhead = 200;
+	int32 NbMinTicksAhead = 50;
 	int32 NbMaxTicksAhead = 400;
 
 	bool ShouldResumeGeneration() const;

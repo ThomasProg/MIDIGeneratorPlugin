@@ -422,7 +422,9 @@ uint32 FGenThread::Run()
 
 		if (!ShouldIgnoreNextToken.load(std::memory_order_acquire) && ShouldSleep())
 		{
+			UE_LOG(LogTemp, Warning, TEXT("=== Pausing GenThread ==="));
 			Semaphore->Wait();
+			UE_LOG(LogTemp, Warning, TEXT("=== Resuming GenThread ==="));
 		}
 
 		if (forceReupdate)
