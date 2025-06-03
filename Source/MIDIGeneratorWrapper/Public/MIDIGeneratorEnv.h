@@ -129,6 +129,7 @@ public:
 
 	void SetTempo(float InTempo);
 	void RegenerateCacheFromTick(int32 UETick);
+	void RegenerateCacheFromTick(int32 UETick, int32 LibTick);
 };
 
 

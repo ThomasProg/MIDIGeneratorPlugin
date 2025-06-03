@@ -567,12 +567,17 @@ float FMIDIGeneratorEnv::GenLibTickToUETick(int32 tick)
 
 void FMIDIGeneratorEnv::RegenerateCacheFromTick(int32 UETick)
 {
+	int32 genLibTick = UETickToGenLibTick(UETick);
+	RegenerateCacheFromTick(UETick, genLibTick);
+}
+
+void FMIDIGeneratorEnv::RegenerateCacheFromTick(int32 UETick, int32 LibTick)
+{
 	//float CurrentTimeMs = Clock->GetCurrentHiResMs();
 	//callbackTime = CurrentTimeMs + DelayInMs;
 	//float UETick = MidiFileData->SongMaps.GetTempoMap().MsToTick(CurrentTimeMs);
 	//CacheRemoveTick = Tick;
-	int32 genLibTick = UETickToGenLibTick(UETick);
-	GenThread->RemoveCacheAfterTick(genLibTick);
+	GenThread->RemoveCacheAfterTick(LibTick);
 
 	ClockLock.Lock();
 #if IS_VERSION_OR_PREV(5, 4)
