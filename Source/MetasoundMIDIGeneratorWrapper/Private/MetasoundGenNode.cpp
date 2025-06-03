@@ -31,10 +31,16 @@
 #include "GenThread.h"
 #include "MIDIGeneratorEnv.h"
 
+#define IS_VERSION(MAJOR, MINOR) (ENGINE_MAJOR_VERSION == MAJOR) && (ENGINE_MINOR_VERSION == MINOR)
+#define IS_VERSION_OR_PREV(MAJOR, MINOR) (ENGINE_MAJOR_VERSION == MAJOR) && (ENGINE_MINOR_VERSION <= MINOR)
+#define IS_VERSION_OR_AFTER(MAJOR, MINOR) (ENGINE_MAJOR_VERSION == MAJOR) && (ENGINE_MINOR_VERSION >= MINOR)
+
+#if IS_VERSION_OR_AFTER(5, 6)
+#include "HarmonixMidi/MIDICursor.h"
+#endif
+
 // Required for ensuring the node is supported by all languages in engine. Must be unique per MetaSound.
 #define LOCTEXT_NAMESPACE "MetasoundStandardNodes_MetaSoundAIGenNode"
-
-
 
 namespace AIGen
 {
@@ -55,7 +61,11 @@ namespace AIGen
 namespace Metasound
 {
 	// Based on FMidiPlayerOperator
+#if IS_VERSION_OR_PREV(5, 4)
 	class FAIGenOperator : public TExecutableOperator<FAIGenOperator>, public FMidiVoiceGeneratorBase, public HarmonixMetasound::FMusicTransportControllable, public FMidiPlayCursor
+#elif IS_VERSION_OR_AFTER(5, 6)
+	class FAIGenOperator : public TExecutableOperator<FAIGenOperator>, public FMidiVoiceGeneratorBase, public HarmonixMetasound::FMusicTransportControllable, public FMidiCursor::FReceiver
+#endif
 	{
 	public:
 		FAIGenOperator(const Metasound::FBuildOperatorParams& InParams,
@@ -75,10 +85,17 @@ namespace Metasound
 			Outputs.MidiStream->SetMidiFile(gen.MidiDataProxy);
 			gen.SetClock(*Outputs.MidiClock);
 
+#if IS_VERSION_OR_PREV(5, 4)
 			Outputs.MidiClock->RegisterHiResPlayCursor(this);
 			Outputs.MidiStream->SetClock(*Outputs.MidiClock);
-
 			Outputs.MidiClock->AttachToMidiResource(gen.MidiFileData);
+#elif IS_VERSION_OR_AFTER(5, 6)
+			Outputs.MidiClock->AttachToSongMapEvaluator(gen.MidiDataProxy->GetMidiFile(), !IsPlaying());
+			MidiCursor.Prepare(gen.MidiDataProxy->GetMidiFile());
+			Outputs.MidiStream->SetTicksPerQuarterNote(gen.MidiDataProxy->GetMidiFile()->TicksPerQuarterNote);
+			Outputs.MidiClock->ClearPersistentLoop();
+			MidiCursor.SeekToNextTick(Outputs.MidiClock->GetNextMidiTickToProcess(), PrerollBars, this);
+#endif
 		}
 
 		void TryUpdateGenThreadInput()
@@ -225,27 +242,49 @@ namespace Metasound
 			}
 
 			Generator->ClockLock.Lock();
+#if IS_VERSION_OR_PREV(5, 4)
 			Generator->CurrentTick = Outputs.MidiClock->GetCurrentHiResTick();
+#elif IS_VERSION_OR_AFTER(5, 6)
+			Generator->CurrentTick = Outputs.MidiClock->GetNextMidiTickToProcess();
+#endif
+#if IS_VERSION_OR_PREV(5, 4)
 			Outputs.MidiClock->GetDrivingMidiPlayCursorMgr()->LockForMidiDataChanges();
+#endif
 			Generator->DecodeTokens();
+#if IS_VERSION_OR_PREV(5, 4)
 			Outputs.MidiClock->GetDrivingMidiPlayCursorMgr()->MidiDataChangeComplete(FMidiPlayCursorMgr::EMidiChangePositionCorrectMode::MaintainTick);
+#endif
 			Generator->ClockLock.Unlock();
 
 			Outputs.MidiStream->PrepareBlock();
+			CurrentRenderBlockFrame = 0;
 
 			Outputs.MidiClock->PrepareBlock();
 
 			InitTransportIfNeeded();
 
 			float speed = 1.0;
-
+#if IS_VERSION_OR_PREV(5, 4)
 			Outputs.MidiClock->AddSpeedChangeToBlock({ 0, 0.0f, speed });
+#elif IS_VERSION_OR_AFTER(5, 6) 
+			Outputs.MidiClock->SetSpeed(0, speed);
+#endif
 
 			TransportSpanPostProcessor MidiClockTransportHandler = [&](int32 StartFrameIndex, int32 EndFrameIndex, HarmonixMetasound::EMusicPlayerTransportState CurrentState)
 			{
 				int32 NumFrames = EndFrameIndex - StartFrameIndex;
+#if IS_VERSION_OR_PREV(5, 4)
 				Outputs.MidiClock->HandleTransportChange(StartFrameIndex, CurrentState);
 				Outputs.MidiClock->Process(StartFrameIndex, NumFrames, PrerollBars, speed);
+#elif IS_VERSION_OR_AFTER(5, 6) 
+				Outputs.MidiClock->SetTransportState(StartFrameIndex, CurrentState);
+				switch (CurrentState)
+				{
+				case HarmonixMetasound::EMusicPlayerTransportState::Playing:
+				case HarmonixMetasound::EMusicPlayerTransportState::Continuing:
+					Outputs.MidiClock->Advance(StartFrameIndex, NumFrames);
+				}
+#endif
 			};
 
 			TransportSpanProcessor TransportHandler = [this](int32 StartFrameIndex, int32 EndFrameIndex, HarmonixMetasound::EMusicPlayerTransportState CurrentState)
@@ -253,17 +292,59 @@ namespace Metasound
 				switch (CurrentState)
 				{
 				case HarmonixMetasound::EMusicPlayerTransportState::Starting:
+#if IS_VERSION_OR_PREV(5, 4)
 					Outputs.MidiClock->ResetAndStart(StartFrameIndex, !ReceivedSeekWhileStopped());
+#elif IS_VERSION_OR_AFTER(5, 6) 
+					if (!ReceivedSeekWhileStopped())
+					{
+						Outputs.MidiClock->SeekTo(StartFrameIndex, 0, 0);
+					}
+#endif
 					break;
 				case HarmonixMetasound::EMusicPlayerTransportState::Seeking:
+#if IS_VERSION_OR_PREV(5, 4)
 					Outputs.MidiClock->SeekTo(StartFrameIndex, Inputs.Transport->GetNextSeekDestination(), PrerollBars);
+#elif IS_VERSION_OR_AFTER(5, 6) 
+					Outputs.MidiClock->SeekTo(StartFrameIndex, Inputs.Transport->GetNextSeekDestination());
+#endif
 					break;
 				}
 				return GetNextTransportState(CurrentState);
 			};
 			ExecuteTransportSpans(Inputs.Transport, BlockSize, TransportHandler, MidiClockTransportHandler);
+#if IS_VERSION_OR_AFTER(5, 6)
+			RenderMidiForClockEvents();
+#endif
 		}
 
+#if IS_VERSION_OR_AFTER(5, 6)
+		void RenderMidiForClockEvents()
+		{
+			const TArray<HarmonixMetasound::FMidiClockEvent>& ClockEvents = Outputs.MidiClock->GetMidiClockEventsInBlock();
+			for (const HarmonixMetasound::FMidiClockEvent& Event : ClockEvents)
+			{
+				CurrentRenderBlockFrame = Event.BlockFrameIndex;
+				if (auto AsAdvance = Event.TryGet<HarmonixMetasound::MidiClockMessageTypes::FAdvance>())
+				{
+					MidiCursor.Process(AsAdvance->FirstTickToProcess, AsAdvance->LastTickToProcess(), *this);
+				}
+				// There's no looping or seeking
+				
+				//else if (auto AsSeekTo = Event.TryGet<HarmonixMetasound::MidiClockMessageTypes::FSeek>())
+				//{
+				//	SendAllNotesOff(Event.BlockFrameIndex, AsSeekTo->NewNextTick);
+				//	MidiCursor.SeekToNextTick(AsSeekTo->NewNextTick, PrerollBars, this);
+				//}
+				//else if (auto AsLoop = Event.TryGet<HarmonixMetasound::MidiClockMessageTypes::FLoop>())
+				//{
+				//	// When looping we don't preroll the events prior to the 
+				//	// loop start point.
+				//	SendAllNotesOff(Event.BlockFrameIndex, AsLoop->FirstTickInLoop);
+				//	MidiCursor.SeekToNextTick(AsLoop->FirstTickInLoop);
+				//}
+			}
+		}
+#endif
 		
 		bool IsPlaying() const;
 
@@ -303,6 +384,12 @@ namespace Metasound
 
 
 		bool NeedsTransportInit = true;
+
+#if IS_VERSION_OR_AFTER(5, 6)
+		int32 CurrentRenderBlockFrame = 0;
+		FMidiCursor MidiCursor;
+#endif
+
 		void InitTransportIfNeeded()
 		{
 			if (NeedsTransportInit)
@@ -323,13 +410,25 @@ namespace Metasound
 					case HarmonixMetasound::EMusicPlayerTransportState::Prepared:
 					case HarmonixMetasound::EMusicPlayerTransportState::Stopping:
 					case HarmonixMetasound::EMusicPlayerTransportState::Killing:
-						Outputs.MidiClock->AddTransportStateChangeToBlock({ 0, 0.0f, HarmonixMetasound::EMusicPlayerTransportState::Prepared });
+#if IS_VERSION_OR_PREV(5, 4)
+						//Outputs.MidiClock->AddTransportStateChangeToBlock({ 0, 0.0f, HarmonixMetasound::EMusicPlayerTransportState::Prepared });
+#elif IS_VERSION_OR_AFTER(5, 6)
+						Outputs.MidiClock->SetTransportState(0, HarmonixMetasound::EMusicPlayerTransportState::Prepared);
+#endif
 						return HarmonixMetasound::EMusicPlayerTransportState::Prepared;
 
 					case HarmonixMetasound::EMusicPlayerTransportState::Starting:
 					case HarmonixMetasound::EMusicPlayerTransportState::Playing:
 					case HarmonixMetasound::EMusicPlayerTransportState::Continuing:
+#if IS_VERSION_OR_PREV(5, 4)
 						Outputs.MidiClock->ResetAndStart(0, !ReceivedSeekWhileStopped());
+#elif IS_VERSION_OR_AFTER(5, 6)
+						Outputs.MidiClock->SetTransportState(0, HarmonixMetasound::EMusicPlayerTransportState::Playing);
+						if (!ReceivedSeekWhileStopped())
+						{
+							Outputs.MidiClock->SeekTo(0, 0, 0);
+						}
+#endif
 						return HarmonixMetasound::EMusicPlayerTransportState::Playing;
 
 					case HarmonixMetasound::EMusicPlayerTransportState::Seeking: // seeking is omitted from init, shouldn't happen
@@ -338,7 +437,11 @@ namespace Metasound
 
 					case HarmonixMetasound::EMusicPlayerTransportState::Pausing:
 					case HarmonixMetasound::EMusicPlayerTransportState::Paused:
+#if IS_VERSION_OR_PREV(5, 4)
 						Outputs.MidiClock->AddTransportStateChangeToBlock({ 0, 0.0f, HarmonixMetasound::EMusicPlayerTransportState::Paused });
+#elif IS_VERSION_OR_AFTER(5, 6)
+						Outputs.MidiClock->SetTransportState(0, HarmonixMetasound::EMusicPlayerTransportState::Paused);
+#endif
 						return HarmonixMetasound::EMusicPlayerTransportState::Paused;
 
 					default:
@@ -376,16 +479,20 @@ namespace Metasound
 		if (IsPlaying())
 		{
 			HarmonixMetasound::FMidiStreamEvent MidiEvent(this, FMidiMsg(Status, Data1, Data2));
+#if IS_VERSION_OR_PREV(5, 4)
 			MidiEvent.BlockSampleFrameIndex = Outputs.MidiClock->GetCurrentBlockFrameIndex();
+#elif IS_VERSION_OR_AFTER(5, 6)
+			MidiEvent.BlockSampleFrameIndex = CurrentRenderBlockFrame;
+#endif
 			MidiEvent.AuthoredMidiTick = Tick;
 			MidiEvent.CurrentMidiTick = Tick;
 			MidiEvent.TrackIndex = TrackIndex;
 			Outputs.MidiStream->AddMidiEvent(MidiEvent);
 
-			if (Status == 144 && Data1 == 70)
-			{
-				UE_LOG(LogTemp, Warning, TEXT("=== Note played at tick %d / Clock current: %d ==="), Tick, Outputs.MidiClock->GetCurrentHiResTick());
-			}
+			//if (Status == 144 && Data1 == 70)
+			//{
+			//	UE_LOG(LogTemp, Warning, TEXT("=== Note played at tick %d / Clock current: %d ==="), Tick, Outputs.MidiClock->GetCurrentHiResTick());
+			//}
 		}
 	}
 

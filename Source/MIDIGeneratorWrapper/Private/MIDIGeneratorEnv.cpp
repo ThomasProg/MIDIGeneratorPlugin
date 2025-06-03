@@ -15,6 +15,10 @@
 #include "onAddTokensArgs.hpp"
 #include "midiConverter.h"
 
+#define IS_VERSION(MAJOR, MINOR) (ENGINE_MAJOR_VERSION == MAJOR) && (ENGINE_MINOR_VERSION == MINOR)
+#define IS_VERSION_OR_PREV(MAJOR, MINOR) (ENGINE_MAJOR_VERSION == MAJOR) && (ENGINE_MINOR_VERSION <= MINOR)
+#define IS_VERSION_OR_AFTER(MAJOR, MINOR) (ENGINE_MAJOR_VERSION == MAJOR) && (ENGINE_MINOR_VERSION >= MINOR)
+
 FMIDIGeneratorProxy::FMIDIGeneratorProxy(UMIDIGeneratorEnv* InGeneratorEnv)
 {
 	if (InGeneratorEnv && InGeneratorEnv->Generator)
@@ -68,6 +72,9 @@ void FMIDIGeneratorEnv::PreloadPipeline(const FString& ModelPath)
 	IAutoRegressivePipeline* ARPipeline = (IAutoRegressivePipeline*)Pipeline; // @TODO : dynamic cast
 
 	GenThread->SetPipeline(ARPipeline);
+
+	BeatGeneratorHandle beatGenerator = createBeatGenerator();
+	
 }
 
 void FMIDIGeneratorEnv::SetTokens(const TArray<int32>& InTokens)
@@ -118,6 +125,32 @@ void FMIDIGeneratorEnv::UpdateCurrentRangeGroup(int32 LastDecodedToken)
 	CurrentRangeGroup = rangeGroups[noteSequenceIndex];
 }
 
+#if IS_VERSION_OR_AFTER(5, 6)
+TSharedPtr<FMidiFileData> BuildMidiWithOneTimeSigature(int32 Tempo, int32 Numerator, int32 Denominator)
+{
+	TSharedPtr<FMidiFileData> MidiData = MakeShared<FMidiFileData>();
+	check(MidiData);
+
+	// make 97bpm, 4/4  tempo map...
+	MidiData->SongMaps.EmptyAllMaps();
+	MidiData->Tracks.Empty();
+
+	MidiData->Tracks.Add(FMidiTrack(TEXT("conductor")));
+	MidiData->Tracks[0].AddEvent(FMidiEvent(0, FMidiMsg(Numerator, Denominator)));
+	MidiData->SongMaps.AddTimeSignatureAtBarIncludingCountIn(0, Numerator, Denominator);
+	const int32 MidiTempo = Harmonix::Midi::Constants::BPMToMidiTempo(float(Tempo));
+	MidiData->Tracks[0].AddEvent(FMidiEvent(0, FMidiMsg(MidiTempo)));
+	MidiData->SongMaps.AddTempoInfoPoint(MidiTempo, 0);
+	MidiData->Tracks[0].Sort();
+
+	MidiData->Tracks.Add(FMidiTrack(TEXT("beats")));
+
+	MidiData->ConformToLength(std::numeric_limits<int32>::max());
+
+	return MidiData;
+}
+#endif
+
 void FMIDIGeneratorEnv::StartGeneration()
 {
 	//GenThread->Start();
@@ -127,12 +160,21 @@ void FMIDIGeneratorEnv::StartGeneration()
 		int32 CurrentTempo = 120;
 		int32 CurrentTimeSigNum = 4;
 		int32 CurrentTimeSigDenom = 4;
+#if IS_VERSION_OR_PREV(5, 4)
 		MidiFileData = HarmonixMetasound::FMidiClock::MakeClockConductorMidiData(CurrentTempo, CurrentTimeSigNum, CurrentTimeSigDenom);
+#elif IS_VERSION_OR_AFTER(5, 6)
+		MidiFileData = BuildMidiWithOneTimeSigature(CurrentTempo, CurrentTimeSigNum, CurrentTimeSigDenom);
+#endif
 
 		MidiFileData->MidiFileName = "Generated";
 		MidiFileData->TicksPerQuarterNote = 16;
 		FMidiTrack track;
 		track.AddEvent(FMidiEvent(0, FMidiMsg::CreateAllNotesKill()));
+
+		// Cursor::TrackNextEventIndexs becomes 1 when reaching the end
+		// it's private, can't access it and can't modify or refresh it
+		// so instead, just add an event that's really far away
+		track.AddEvent(FMidiEvent(TNumericLimits<int32>::Max(), FMidiMsg::CreateAllNotesKill()));
 		MidiFileData->Tracks.Add(MoveTemp(track));
 
 		MidiDataProxy = MakeShared<FMidiFileProxy, ESPMode::ThreadSafe>(MidiFileData);
@@ -184,67 +226,6 @@ void FMIDIGeneratorEnv::StartGeneration()
 				int32 decodedTokensSize;
 				tokenHistory_getTokens(decodedTokenHistory, &decodedTokens, &decodedTokensSize);
 				UpdateCurrentRangeGroup(decodedTokens[decodedTokensSize - 1]);
-
-
-				//GenThread->GetPipeline()->setSequencerUserData(GenThread->GetBatch(), this);
-				//callbackHash = GenThread->GetPipeline()->addCallbackToSequencer(GenThread->GetBatch(), libTick, [](int32_t hash, int32_t genLibTick, void* userData)
-				//	{
-				//		FMIDIGeneratorEnv& env = *(FMIDIGeneratorEnv*)userData;
-
-				//		env.hasRegen = true;
-				//		env.nbEncodedTokensSinceRegen = 0;
-				//		env.nbAddedSinceLastTimeshift = 0;
-				//		env.nbAddedSinceLast = 0;
-
-
-
-				//		GenerationHistory* History = env.GenThread->GetPipeline()->getHistory(env.GenThread->GetBatch());
-
-				//		Note* outNotes;
-				//		size_t outLength;
-				//		generationHistory_getNotesMut(History, &outNotes, &outLength);
-
-				//		//Note newNote;
-				//		//newNote = outNotes[outLength - 1];
-				//		//newNote.tick = genLibTick;
-				//		//newNote.pitch = 90;
-				//		//generationHistory_addStandaloneNote(History, &newNote);
-				//		//newNote.pitch = 40;
-				//		//generationHistory_addStandaloneNote(History, &newNote);
-
-				//		Note newNote;
-				//		newNote = outNotes[outLength - 1];
-				//		newNote.pitch = FMath::Max(newNote.pitch, env.LastFireworkPitch+4);
-				//		newNote.tick = genLibTick;
-				//		env.LastFireworkPitch = newNote.pitch;
-				//		generationHistory_addStandaloneNote(History, &newNote);
-				//		newNote.pitch += 4;
-				//		generationHistory_addStandaloneNote(History, &newNote);
-				//		newNote.pitch += 3;
-				//		generationHistory_addStandaloneNote(History, &newNote);
-				//	});
-
-				//generationHistory_setOnNoteAddedData(History, this);
-				//generationHistory_setOnNoteAdded(History, [](void* userData)
-				//	{
-				//		FMIDIGeneratorEnv& env = *(FMIDIGeneratorEnv*)userData;
-
-				//		GenerationHistory* History = env.GenThread->GetPipeline()->getHistory(env.GenThread->GetBatch());
-
-				//		Note* outNotes;
-				//		size_t outLength;
-				//		generationHistory_getNotesMut(History, &outNotes, &outLength);
-
-				//		Note newNote;
-				//		newNote = outNotes[outLength - 1];
-				//		newNote.pitch = 90;
-				//		generationHistory_addStandaloneNote(History, &newNote);
-				//		newNote.pitch = 40;
-				//		generationHistory_addStandaloneNote(History, &newNote);
-
-				//		generationHistory_setOnNoteAddedData(History, nullptr);
-				//		generationHistory_setOnNoteAdded(History, nullptr);
-				//	});
 			});
 
 		// Set default tokens
@@ -257,7 +238,6 @@ void FMIDIGeneratorEnv::StartGeneration()
 void FMIDIGeneratorEnv::StopGeneration()
 {
 	GenThread->Stop();
-	//GenThread->SetOnGenerated(nullptr);
 }
 
 void FMIDIGeneratorEnv::SetFilter()
@@ -447,6 +427,7 @@ void FMIDIGeneratorEnv::DecodeTokens()
 		int32 CurrentTick = args.self->CurrentTick;// args.self->Outputs.MidiClock->GetCurrentHiResTick();
 
 		int32 Tick = FMath::RoundToInt32(float(args.self->GenLibTickToUETick(newNote.tick)));
+		int32 OffTick = FMath::RoundToInt32(float(args.self->GenLibTickToUETick(newNote.tick + newNote.duration*4)));
 
 		//if (Tick < CurrentTick)
 		//{
@@ -465,30 +446,23 @@ void FMIDIGeneratorEnv::DecodeTokens()
 		//	return;
 		//}
 
+		UE_LOG(LogTemp, Warning, TEXT("=== Added Note / Current: %d / New Note: %d"), CurrentTick, Tick);
+
 		if (args.self->MidiFileData->Tracks[0].GetUnsortedEvents().IsEmpty() or Tick >= args.self->MidiFileData->Tracks[0].GetEvents().Last().GetTick())
 		{
-			//UE_LOG(LogTemp, Warning, TEXT("New Note Tick : %d / CurrentTick : %d"), Tick, CurrentTick);
 			args.LastTick = Tick;
 
-			//if (args.self->regenTick < 10)
-			//{
-			//	Velocity = 120;
-			//}
 			FMidiMsg Msg{ FMidiMsg::CreateNoteOn(Channel - 1, NoteNumber, Velocity) }; 
 			args.self->MidiFileData->Tracks[0].AddEvent(FMidiEvent(Tick, Msg));
 
-			if (NoteNumber == 70)
-			{
-				UE_LOG(LogTemp, Warning, TEXT("=== Added without Sort for : %d==="), Tick);
-			}
+			//if (NoteNumber == 70)
+			//{
+			//	UE_LOG(LogTemp, Warning, TEXT("=== Added without Sort for : %d==="), Tick);
+			//}
 
-			//args.self->regenTick++;
-
-			//int32 Tick2 = (newNote.tick+50) * 100 + args.self->AddedTicks;
-			//FMidiMsg Msg2{ FMidiMsg::CreateNoteOff(Channel - 1, NoteNumber) };
-			//args.self->MidiFileData->Tracks[0].AddEvent(FMidiEvent(Tick2, Msg2));
-
-			//args.self->MidiFileData->GetLastEventTick();
+			FMidiMsg OffMsg{ FMidiMsg::CreateNoteOff(Channel - 1, NoteNumber) };
+			args.self->MidiFileData->Tracks[0].AddEvent(FMidiEvent(OffTick, OffMsg));
+			args.self->MidiFileData->Tracks[0].Sort();
 		}
 		else // if (NoteNumber == 70)// SORTS : @TODO : opti sort
 		{
@@ -500,7 +474,11 @@ void FMIDIGeneratorEnv::DecodeTokens()
 			args.self->MidiFileData->Tracks[0].AddEvent(FMidiEvent(Tick, Msg));
 			args.self->MidiFileData->Tracks[0].Sort();
 
-			UE_LOG(LogTemp, Warning, TEXT("=== Added with Sort ==="));
+			//UE_LOG(LogTemp, Warning, TEXT("=== Added with Sort ==="));
+
+			FMidiMsg OffMsg{ FMidiMsg::CreateNoteOff(Channel - 1, NoteNumber) };
+			args.self->MidiFileData->Tracks[0].AddEvent(FMidiEvent(OffTick, OffMsg));
+			args.self->MidiFileData->Tracks[0].Sort();
 		}
 
 	};
@@ -537,6 +515,11 @@ void FMIDIGeneratorEnv::DecodeTokens()
 
 	}
 
+	if (OutNotes != nullptr && OutLength != 0)
+	{
+		beatGenerator_refresh(GenThread->beatGenerator, OutNotes, OutNotes + OutLength);
+	}
+
 	//const double EndTime = FPlatformTime::Seconds();
 	//const double Elapsed = EndTime - StartTime;
 
@@ -546,7 +529,11 @@ void FMIDIGeneratorEnv::DecodeTokens()
 
 	//UE_LOG(LogTemp, Warning, TEXT("Max: %f"), MaxTime);
 
+#if IS_VERSION_OR_PREV(5, 4)
 	float CurrentTimeMs = Clock->GetCurrentHiResMs();
+#elif IS_VERSION_OR_AFTER(5, 6)
+	float CurrentTimeMs = Clock->GetCurrentSongPosMs();
+#endif
 	float Tick = MidiFileData->SongMaps.GetTempoMap().MsToTick(CurrentTimeMs);
 	int32 genLibTick = UETickToGenLibTick(Tick);
 
@@ -588,9 +575,20 @@ void FMIDIGeneratorEnv::RegenerateCacheFromTick(int32 UETick)
 	GenThread->RemoveCacheAfterTick(genLibTick);
 
 	ClockLock.Lock();
+#if IS_VERSION_OR_PREV(5, 4)
 	Clock->GetDrivingMidiPlayCursorMgr()->LockForMidiDataChanges();
+#endif
 	MidiFileData->Tracks[0].ClearEventsAfter(int32(UETick), true);
+	MidiFileData->Tracks[1].ClearEventsAfter(int32(UETick), true);
+
+	// Cursor::TrackNextEventIndexs becomes 1 when reaching the end
+	// it's private, can't access it and can't modify or refresh it
+	// so instead, just add an event that's really far away
+	MidiFileData->Tracks[0].AddEvent(FMidiEvent(TNumericLimits<int32>::Max(), FMidiMsg::CreateAllNotesKill()));
+
+#if IS_VERSION_OR_PREV(5, 4)
 	Clock->GetDrivingMidiPlayCursorMgr()->MidiDataChangeComplete(FMidiPlayCursorMgr::EMidiChangePositionCorrectMode::MaintainTick);
+#endif
 	ClockLock.Unlock();
 }
 
@@ -601,7 +599,11 @@ void FMIDIGeneratorEnv::RegenerateCacheAfterDelay(float DelayInMs)
 		return;
 	}
 
+#if IS_VERSION_OR_PREV(5, 4)
 	float CurrentTimeMs = Clock->GetCurrentHiResMs();
+#elif IS_VERSION_OR_AFTER(5, 6)
+	float CurrentTimeMs = Clock->GetCurrentSongPosMs();
+#endif
 	callbackTime = CurrentTimeMs + DelayInMs;
 	float Tick = MidiFileData->SongMaps.GetTempoMap().MsToTick(callbackTime);
 	CacheRemoveTick = Tick;
@@ -610,9 +612,18 @@ void FMIDIGeneratorEnv::RegenerateCacheAfterDelay(float DelayInMs)
 	GenThread->RemoveCacheAfterTick(genLibTick);
 
 	ClockLock.Lock();
+#if IS_VERSION_OR_PREV(5, 4)
 	Clock->GetDrivingMidiPlayCursorMgr()->LockForMidiDataChanges();
+#endif
 	MidiFileData->Tracks[0].ClearEventsAfter(int32(Tick), true);
+	// Cursor::TrackNextEventIndexs becomes 1 when reaching the end
+	// it's private, can't access it and can't modify or refresh it
+	// so instead, just add an event that's really far away
+	MidiFileData->Tracks[0].AddEvent(FMidiEvent(TNumericLimits<int32>::Max(), FMidiMsg::CreateAllNotesKill()));
+
+#if IS_VERSION_OR_PREV(5, 4)
 	Clock->GetDrivingMidiPlayCursorMgr()->MidiDataChangeComplete(FMidiPlayCursorMgr::EMidiChangePositionCorrectMode::MaintainTick);
+#endif
 	ClockLock.Unlock();
 }
 
@@ -624,9 +635,13 @@ void FMIDIGeneratorEnv::SetTempo(float InTempo)
 	}
 
 	ClockLock.Lock();
+#if IS_VERSION_OR_PREV(5, 4)
 	Clock->GetDrivingMidiPlayCursorMgr()->LockForMidiDataChanges();
 	MidiFileData->AddTempoChange(0, Clock->GetCurrentMidiTick(), InTempo);
 	Clock->GetDrivingMidiPlayCursorMgr()->MidiDataChangeComplete(FMidiPlayCursorMgr::EMidiChangePositionCorrectMode::MaintainTick);
+#elif IS_VERSION_OR_AFTER(5, 6)
+	MidiFileData->AddTempoChange(0, Clock->GetNextMidiTickToProcess(), InTempo);
+#endif
 	ClockLock.Unlock();
 
 	if (callbackHash != -1)

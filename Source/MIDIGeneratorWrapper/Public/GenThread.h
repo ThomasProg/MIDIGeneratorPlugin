@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "MIDIGenerator.h"
 #include "TokenizerAsset.h"
+#include "BeatGenerator.h"
 #include "fwd.h"
 
 DECLARE_CYCLE_STAT(TEXT("GenThread"), STAT_GenThread, STATGROUP_Game);
@@ -152,6 +153,8 @@ private:
 	////~ End IAudioProxyDataFactory Interface.
 
 public:
+	BeatGeneratorHandle beatGenerator = nullptr;
+
 	std::atomic_bool ShouldIgnoreNextToken = false;
 	int32_t CacheTickToRemove = 0;
 	float CacheMsToRemove = 0;

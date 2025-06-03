@@ -145,6 +145,8 @@ bool FGenThread::Init()
 			});
 
 		Pipeline->createHistory(*Tokenizer->GetTokenizer()->GetTokenizer());
+
+		beatGenerator = createBeatGenerator();
 	}
 
 
@@ -371,6 +373,10 @@ bool FGenThread::ShouldResumeGeneration() const
 	size_t outLength;
 	TokenHistoryHandle enchist = getEncodedTokensHistory(History);
 	generationHistory_getNotes(History, &outNotes, &outLength);
+	if (outNotes == nullptr)
+	{
+		return true;
+	}
 	return outNotes[outLength - 1].tick < CurrentTick + NbMinTicksAhead;
 }
 
@@ -422,9 +428,13 @@ uint32 FGenThread::Run()
 
 		if (!ShouldIgnoreNextToken.load(std::memory_order_acquire) && ShouldSleep())
 		{
-			UE_LOG(LogTemp, Warning, TEXT("=== Pausing GenThread ==="));
+			const Note* outNotes = nullptr;
+			size_t outLength;
+			generationHistory_getNotes(History, &outNotes, &outLength);
+			UE_LOG(LogTemp, Warning, TEXT("=== Pausing GenThread : Current: %d / Generated until: %d"), CurrentTick.load(), outNotes[outLength - 1].tick);
 			Semaphore->Wait();
-			UE_LOG(LogTemp, Warning, TEXT("=== Resuming GenThread ==="));
+			generationHistory_getNotes(History, &outNotes, &outLength);
+			UE_LOG(LogTemp, Warning, TEXT("=== Resuming GenThread : Current: %d / Generated until: %d"), CurrentTick.load(), outNotes[outLength - 1].tick);
 		}
 
 		if (forceReupdate)
@@ -567,6 +577,11 @@ uint32 FGenThread::Run()
 
 void FGenThread::Exit() 
 {
+	if (beatGenerator)
+	{
+		destroyBeatGenerator(beatGenerator);
+	}
+
 	if (Pipeline == nullptr)
 	{
 		runInstance_removeBatch(runInstance, batch);
@@ -599,6 +614,7 @@ void FGenThread::RemoveCacheAfterTickInternal()
 {
 	int32 CacheTickToRemoveValue = CacheTickToRemove;
 	Pipeline->batchRewind(Batch2, CacheTickToRemoveValue);
+	beatGenerator_rewind(beatGenerator, CacheTickToRemoveValue);
 	OnCacheRemoved.Broadcast(CacheTickToRemoveValue);
 }
 
