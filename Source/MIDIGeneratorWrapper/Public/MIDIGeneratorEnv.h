@@ -81,6 +81,7 @@ public:
 	int32 AddedTicks = 0;
 
 	int32 nextNoteIndexToProcess = 0;
+	int32 nextBeatNoteIndexToProcess = 0;
 
 	RangeGroupHandle BaseRangeGroup;
 	RangeGroupHandle PitchTimeshiftRangeGroup;

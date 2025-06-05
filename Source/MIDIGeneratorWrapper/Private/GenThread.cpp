@@ -371,7 +371,6 @@ bool FGenThread::ShouldResumeGeneration() const
 	GenerationHistory* History = Pipeline->getHistory(Batch2);
 	const Note* outNotes;
 	size_t outLength;
-	TokenHistoryHandle enchist = getEncodedTokensHistory(History);
 	generationHistory_getNotes(History, &outNotes, &outLength);
 	if (outNotes == nullptr)
 	{
@@ -475,8 +474,9 @@ uint32 FGenThread::Run()
 		}
 		Mutex.Unlock();
 
-		if (ShouldIgnoreNextToken.load(std::memory_order_acquire))
+		if (ShouldRemoveTokens.load(std::memory_order_acquire))
 		{
+			ShouldRemoveTokens = false;
 			ShouldIgnoreNextToken = false;
 			RemoveCacheAfterTickInternal();
 		}
@@ -614,15 +614,32 @@ void FGenThread::RemoveCacheAfterTickInternal()
 {
 	int32 CacheTickToRemoveValue = CacheTickToRemove;
 	Pipeline->batchRewind(Batch2, CacheTickToRemoveValue);
-	beatGenerator_rewind(beatGenerator, CacheTickToRemoveValue);
+	//beatGenerator_rewind(beatGenerator, CacheTickToRemoveValue);
 	OnCacheRemoved.Broadcast(CacheTickToRemoveValue);
 }
 
 void FGenThread::RemoveCacheAfterTick(int32 GenLibTick, float Ms)
 {
+	GenerationHistory* History = Pipeline->getHistory(Batch2);
+	const Note* outNotes = nullptr;
+	size_t outLength;
+	generationHistory_getNotes(History, &outNotes, &outLength);
+	if (outNotes == nullptr)
+	{
+		return;
+	}
+
+	if (CacheTickToRemove > outNotes[outLength - 1].tick)
+	{
+		return;
+	}
+	
+	ShouldIgnoreNextToken.store(true, std::memory_order_release);
+
 	CacheTickToRemove = GenLibTick;
 	CacheMsToRemove = Ms;
-	ShouldIgnoreNextToken.store(true, std::memory_order_release);
+
+	ShouldRemoveTokens.store(true, std::memory_order_release);
 	Semaphore->Trigger();
 }
 

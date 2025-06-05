@@ -156,6 +156,7 @@ public:
 	BeatGeneratorHandle beatGenerator = nullptr;
 
 	std::atomic_bool ShouldIgnoreNextToken = false;
+	std::atomic_bool ShouldRemoveTokens = false;
 	int32_t CacheTickToRemove = 0;
 	float CacheMsToRemove = 0;
 
