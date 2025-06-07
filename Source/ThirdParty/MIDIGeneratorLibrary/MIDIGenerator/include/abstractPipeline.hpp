@@ -79,8 +79,8 @@ public:
 
     using Callback = void(*)(int32_t hash, int32_t tick, void* userData);
     // Returns hash
-    virtual int32_t addCallbackToSequencer(AutoRegressiveBatchHandle batchHandle, int32_t tick, Callback callback, Callback undo) { return 0; }
+    virtual int32_t addCallbackToSequencer(AutoRegressiveBatchHandle batchHandle, int32_t tick, void* userData, Callback callback, Callback undo) { return 0; }
+    virtual int32_t addCallbackToSequencer(AutoRegressiveBatchHandle batchHandle, int32_t tick, class ISequencerObserver* observer) { return 0; }
     virtual void removeCallbackFromSequencer(AutoRegressiveBatchHandle batchHandle, int32_t hash) {}
     virtual void updateSequencerCallbackTick(AutoRegressiveBatchHandle batchHandle, int32_t hash, int32_t tick) {}
-    virtual void setSequencerUserData(AutoRegressiveBatchHandle batchHandle, void* userData) {}
 };

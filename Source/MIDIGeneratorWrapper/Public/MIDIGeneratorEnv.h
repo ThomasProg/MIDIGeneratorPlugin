@@ -26,6 +26,23 @@ DECLARE_CYCLE_STAT(TEXT("GenThread::DecodeToken1"), STAT_GenThread_DecodeToken1,
 DECLARE_CYCLE_STAT(TEXT("GenThread::DecodeToken2"), STAT_GenThread_DecodeToken2, STATGROUP_Game);
 DECLARE_CYCLE_STAT(TEXT("GenThread::DecodeToken3"), STAT_GenThread_DecodeToken3, STATGROUP_Game);
 
+UENUM(BlueprintType) // This makes the enum usable in Blueprints
+enum class EScale : uint8
+{
+	IonianMajor,
+	//DorianMinor,
+	Mixolydian,
+	MelodicMinor,
+	HarmonicMinor,
+	WholeTone,
+	Blues,
+	PentatonicMajor,
+	PentatonicMinor,
+	HungarianMinor,
+	Byzantine,
+	Diminished
+};
+
 class FMIDIGeneratorProxy final : public Audio::TProxyData<FMIDIGeneratorProxy>
 {
 public:
@@ -51,19 +68,22 @@ struct MIDIGENERATORWRAPPER_API FMIDIGeneratorEnv
 {
 public:
 	UPROPERTY(BlueprintReadWrite, EditAnywhere)
-	int32 maxPitch = 127;
+	int32 maxPitch = 60;
 	UPROPERTY(BlueprintReadWrite, EditAnywhere)
-	int32 minPitch = 0;
+	int32 minPitch = 40;
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere)
-	int32 maxDeltaTime = 100000;
+	float maxTimeShift = 2.0;
 	UPROPERTY(BlueprintReadWrite, EditAnywhere)
-	int32 minDeltaTime = 0;
+	float minTimeShift = 0;
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere)
 	int32 maxIntensity = 100000;
 	UPROPERTY(BlueprintReadWrite, EditAnywhere)
 	int32 minIntensity = 0;
+
+	bool GenerateBeats = true;
+	bool PlayFireworkEffect = false;
 
 	TSharedPtr<class FGenThread> GenThread = MakeShared<FGenThread>();
 
@@ -103,9 +123,12 @@ public:
 	float CacheRemoveTick = 0;
 	int32 LastFireworkPitch = 40;
 
-
+	// @TODO : move to music director
 	int32 callbackHash = -1;
 	float callbackTime = 0;
+
+	const int32_t* Scale = nullptr;
+	int32_t ScaleSize = 0;
 
 public:
 	~FMIDIGeneratorEnv();
@@ -147,11 +170,6 @@ public:
 	FMIDIGeneratorProxyPtr Generator;
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere)
-	int32 maxPitch = 127;
-	UPROPERTY(BlueprintReadWrite, EditAnywhere)
-	int32 minPitch = 0;
-
-	UPROPERTY(BlueprintReadWrite, EditAnywhere)
 	int32 maxDeltaTime = 100000;
 	UPROPERTY(BlueprintReadWrite, EditAnywhere)
 	int32 minDeltaTime = 0;
@@ -190,6 +208,27 @@ public:
 
 	UFUNCTION(BlueprintCallable)
 	void RegenerateCacheAfterDelay(float DelayInMs);
+
+	UFUNCTION(BlueprintCallable)
+	void SetScale(EScale Scale);
+
+	UFUNCTION(BlueprintCallable)
+	void SetPitchRange(int32 MinPitch, int32 MaxPitch);
+
+	UFUNCTION(BlueprintCallable)
+	void GetPitchRange(int32& OutMinPitch, int32& OutMaxPitch) const;
+
+	UFUNCTION(BlueprintCallable)
+	void SetTimeShiftRange(float MinTimeShift, float MaxTimeShift);
+
+	UFUNCTION(BlueprintCallable)
+	void GetTimeShiftRange(float& OutMinTimeShift, float& OutMaxTimeShift) const;
+
+	UFUNCTION(BlueprintCallable)
+	void SetGenerateBeats(bool doesGenerate);
+
+	UFUNCTION(BlueprintCallable)
+	void SetPlayFireworkEffect(bool shouldPlayEffect);
 
 	//~Begin IAudioProxyDataFactory Interface.
 	virtual TSharedPtr<Audio::IProxyData> CreateProxyData(const Audio::FProxyDataInitParams& InitParams) override;

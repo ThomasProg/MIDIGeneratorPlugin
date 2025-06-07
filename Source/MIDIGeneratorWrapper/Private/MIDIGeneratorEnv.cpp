@@ -333,27 +333,30 @@ void FMIDIGeneratorEnv::SetFilter()
 				//	musicalScalePenaltyTransform(args.logitsTensor, CurrentRangeGroup, scale, 1, 1.05, Tok);
 				//}
 				//else
+				if (Scale != nullptr && ScaleSize != 0)
 				{
-					musicalScalePenaltyTransform(args.logitsTensor, CurrentRangeGroup, Scales::Ionian::CMajor::get(), Scales::Ionian::CMajor::size(), 1.05, Tok);
+					//musicalScalePenaltyTransform(args.logitsTensor, CurrentRangeGroup, Scales::Ionian::CMajor::get(), Scales::Ionian::CMajor::size(), 1.05, Tok);
+					musicalScalePenaltyTransform(args.logitsTensor, CurrentRangeGroup, Scale, ScaleSize, 1.05, Tok);
 				}
 			}
 			{
 				SCOPE_CYCLE_COUNTER(STAT_GenThread_LogitProcessing3);
-				//if (nbEncodedTokensSinceRegen < 1)
-				//{
-				//	//pitchRangePenaltyTransform(args.logitsTensor, CurrentRangeGroup, 70, 90, 0.7, Tok);
-				//	pitchRangePenaltyTransform(args.logitsTensor, CurrentRangeGroup, 70, 90, 15.0, Tok);
-				//}
-				//else
+				if (PlayFireworkEffect && nbEncodedTokensSinceRegen < 3)
 				{
-					pitchRangePenaltyTransform(args.logitsTensor, CurrentRangeGroup, 40, 60, 0.7, Tok);
+					//pitchRangePenaltyTransform(args.logitsTensor, CurrentRangeGroup, 70, 90, 0.7, Tok);
+					pitchRangePenaltyTransform(args.logitsTensor, CurrentRangeGroup, 70, 90, 15.0, Tok);
+				}
+				else
+				{
+					pitchRangePenaltyTransform(args.logitsTensor, CurrentRangeGroup, minPitch, maxPitch, 8.0, Tok);
+					//pitchRangePenaltyTransform(args.logitsTensor, CurrentRangeGroup, 40, 60, 0.7, Tok);
 				}
 				//pitchRangePenaltyTransform(args.logitsTensor, CurrentRangeGroup, 40, 80, 0.05, Tok);
 			}
 
 			{
 				//SCOPE_CYCLE_COUNTER(STAT_GenThread_LogitProcessing3);
-				timeShiftRangePenaltyTransform(args.logitsTensor, CurrentRangeGroup, 0.0, 2.0, 1.05, Tok);
+				timeShiftRangePenaltyTransform(args.logitsTensor, CurrentRangeGroup, minTimeShift, maxTimeShift, 1.05, Tok);
 
 				//if (nbEncodedTokensSinceRegen < 20)
 				//{
@@ -528,7 +531,7 @@ void FMIDIGeneratorEnv::DecodeTokens()
 
 	}
 
-	if (OutNotes != nullptr && OutLength != 0)
+	if (OutNotes != nullptr && OutLength != 0 && GenerateBeats)
 	{
 		beatGenerator_refresh(GenThread->beatGenerator, OutNotes+nextBeatNoteIndexToProcess, OutNotes + OutLength);
 
@@ -747,6 +750,91 @@ void UMIDIGeneratorEnv::RegenerateCacheAfterDelay(float DelayInMs)
 	Generator->MidiGenerator->RegenerateCacheAfterDelay(DelayInMs);
 }
 
+void UMIDIGeneratorEnv::SetScale(EScale Scale)
+{
+	using namespace Scales;
+	switch (Scale)
+	{
+		case EScale::IonianMajor:
+			Generator->MidiGenerator->Scale = Ionian::Major::get();
+			Generator->MidiGenerator->ScaleSize = Ionian::Major::size();
+			break;
+		case EScale::Mixolydian:
+			Generator->MidiGenerator->Scale = Mixolydian::get();
+			Generator->MidiGenerator->ScaleSize = Mixolydian::size();
+			break;
+		case EScale::MelodicMinor:
+			Generator->MidiGenerator->Scale = Melodic::Minor::get();
+			Generator->MidiGenerator->ScaleSize = Melodic::Minor::size();
+			break;
+		case EScale::HarmonicMinor:
+			Generator->MidiGenerator->Scale = Harmonic::Minor::get();
+			Generator->MidiGenerator->ScaleSize = Harmonic::Minor::size();
+			break;
+		case EScale::WholeTone:
+			Generator->MidiGenerator->Scale = WholeTone::get();
+			Generator->MidiGenerator->ScaleSize = WholeTone::size();
+			break;
+		case EScale::Blues:
+			Generator->MidiGenerator->Scale = Blues::get();
+			Generator->MidiGenerator->ScaleSize = Blues::size();
+			break;
+		case EScale::PentatonicMajor:
+			Generator->MidiGenerator->Scale = Pentatonic::Major::get();
+			Generator->MidiGenerator->ScaleSize = Pentatonic::Major::size();
+			break;
+		case EScale::PentatonicMinor:
+			Generator->MidiGenerator->Scale = Pentatonic::Minor::get();
+			Generator->MidiGenerator->ScaleSize = Pentatonic::Minor::size();
+			break;
+		case EScale::HungarianMinor:
+			Generator->MidiGenerator->Scale = Hungarian::Minor::get();
+			Generator->MidiGenerator->ScaleSize = Hungarian::Minor::size();
+			break;
+		case EScale::Byzantine:
+			Generator->MidiGenerator->Scale = Byzantine::get();
+			Generator->MidiGenerator->ScaleSize = Byzantine::size();
+			break;
+		case EScale::Diminished:
+			Generator->MidiGenerator->Scale = Diminished::get();
+			Generator->MidiGenerator->ScaleSize = Diminished::size();
+			break;
+	}
+}
+
+void UMIDIGeneratorEnv::SetPitchRange(int32 MinPitch, int32 MaxPitch)
+{
+	Generator->MidiGenerator->minPitch = MinPitch;
+	Generator->MidiGenerator->maxPitch = MaxPitch;
+}
+
+void UMIDIGeneratorEnv::GetPitchRange(int32& OutMinPitch, int32& OutMaxPitch) const
+{
+	OutMinPitch = Generator->MidiGenerator->minPitch;
+	OutMaxPitch = Generator->MidiGenerator->maxPitch;
+}
+
+void UMIDIGeneratorEnv::SetTimeShiftRange(float MinTimeShift, float MaxTimeShift)
+{
+	Generator->MidiGenerator->minTimeShift = MinTimeShift;
+	Generator->MidiGenerator->maxTimeShift = MaxTimeShift;
+}
+
+void UMIDIGeneratorEnv::GetTimeShiftRange(float& OutMinTimeShift, float& OutMaxTimeShift) const
+{
+	OutMinTimeShift = Generator->MidiGenerator->minTimeShift;
+	OutMaxTimeShift = Generator->MidiGenerator->maxTimeShift;
+}
+
+void UMIDIGeneratorEnv::SetGenerateBeats(bool doesGenerate)
+{
+	Generator->MidiGenerator->GenerateBeats = doesGenerate;
+}
+
+void UMIDIGeneratorEnv::SetPlayFireworkEffect(bool shouldPlayEffect)
+{
+	Generator->MidiGenerator->PlayFireworkEffect = shouldPlayEffect;
+}
 
 TSharedPtr<Audio::IProxyData> UMIDIGeneratorEnv::CreateProxyData(const Audio::FProxyDataInitParams& InitParams)
 {
