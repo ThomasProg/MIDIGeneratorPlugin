@@ -146,7 +146,9 @@ bool FGenThread::Init()
 
 		Pipeline->createHistory(*Tokenizer->GetTokenizer()->GetTokenizer());
 
+		BeatGeneratorMutex.Lock();
 		beatGenerator = createBeatGenerator();
+		BeatGeneratorMutex.Unlock();
 	}
 
 
@@ -579,7 +581,9 @@ void FGenThread::Exit()
 {
 	if (beatGenerator)
 	{
+		BeatGeneratorMutex.Lock();
 		destroyBeatGenerator(beatGenerator);
+		BeatGeneratorMutex.Unlock();
 	}
 
 	if (Pipeline == nullptr)
@@ -614,7 +618,9 @@ void FGenThread::RemoveCacheAfterTickInternal()
 {
 	int32 CacheTickToRemoveValue = CacheTickToRemove;
 	Pipeline->batchRewind(Batch2, CacheTickToRemoveValue);
-	//beatGenerator_rewind(beatGenerator, CacheTickToRemoveValue);
+	BeatGeneratorMutex.Lock();
+	beatGenerator_rewind(beatGenerator, CacheTickToRemoveValue);
+	BeatGeneratorMutex.Unlock();
 	OnCacheRemoved.Broadcast(CacheTickToRemoveValue);
 }
 

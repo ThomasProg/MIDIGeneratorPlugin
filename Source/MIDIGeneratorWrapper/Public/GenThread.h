@@ -154,6 +154,7 @@ private:
 
 public:
 	BeatGeneratorHandle beatGenerator = nullptr;
+	FCriticalSection BeatGeneratorMutex;
 
 	std::atomic_bool ShouldIgnoreNextToken = false;
 	std::atomic_bool ShouldRemoveTokens = false;

@@ -533,13 +533,14 @@ void FMIDIGeneratorEnv::DecodeTokens()
 
 	if (OutNotes != nullptr && OutLength != 0 && GenerateBeats)
 	{
+		GenThread->BeatGeneratorMutex.Lock();
 		beatGenerator_refresh(GenThread->beatGenerator, OutNotes+nextBeatNoteIndexToProcess, OutNotes + OutLength);
 
 		const BeatNote* outBeatNotes;
 		int32_t outBeatsLength;
 		beatGenerator_getNotes(GenThread->beatGenerator, &outBeatNotes, &outBeatsLength);
 
-		for (const BeatNote* beatNote = outBeatNotes + nextBeatNoteIndexToProcess; beatNote != outBeatNotes + outBeatsLength; ++beatNote)
+		for (const BeatNote* beatNote = outBeatNotes + nextBeatNoteIndexToProcess; beatNote < outBeatNotes + outBeatsLength; ++beatNote)
 		{
 			// @TODO : switch on type
 			//beatNote->type;
@@ -559,6 +560,7 @@ void FMIDIGeneratorEnv::DecodeTokens()
 			args.self->MidiFileData->Tracks[1].AddEvent(FMidiEvent(OffTick, OffMsg));
 		}
 		args.self->MidiFileData->Tracks[1].Sort();
+		GenThread->BeatGeneratorMutex.Unlock();
 
 		nextBeatNoteIndexToProcess = outBeatsLength;
 	}
@@ -635,6 +637,16 @@ void FMIDIGeneratorEnv::RegenerateCacheFromTick(int32 UETick, int32 LibTick)
 	Clock->GetDrivingMidiPlayCursorMgr()->MidiDataChangeComplete(FMidiPlayCursorMgr::EMidiChangePositionCorrectMode::MaintainTick);
 #endif
 	ClockLock.Unlock();
+
+	GenThread->BeatGeneratorMutex.Lock();
+
+	const BeatNote* outBeatNotes;
+	int32_t outBeatsLength;
+	beatGenerator_getNotes(GenThread->beatGenerator, &outBeatNotes, &outBeatsLength);
+
+	nextBeatNoteIndexToProcess = outBeatsLength;
+
+	GenThread->BeatGeneratorMutex.Unlock();
 }
 
 void FMIDIGeneratorEnv::RegenerateCacheAfterDelay(float DelayInMs)
