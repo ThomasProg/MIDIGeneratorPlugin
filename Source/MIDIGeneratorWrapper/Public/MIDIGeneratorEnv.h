@@ -135,6 +135,8 @@ public:
 	void StartGeneration();
 	void StopGeneration();
 
+	void AddFireworkEffect();
+
 	// @TODO : remove
 	// should be initialized with a TokenizerAsset and a ModelAsset instead
 	void PreStart(const FString& TokenizerPath, const FString& ModelPath, const TArray<int32>& InTokens);
@@ -181,6 +183,9 @@ public:
 	
 public:
 	UMIDIGeneratorEnv();
+
+	UFUNCTION(BlueprintCallable)
+	void AddFireworkEffect();
 
 	UFUNCTION(BlueprintCallable)
 	void StartGeneration();

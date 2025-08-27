@@ -11,6 +11,7 @@
 #include "logitProcessing.h"
 #include "logitProcessing.hpp"
 #include "searchArgs.h"
+#include "autoRegressivePipelineObserver.hpp"
 #include "generationHistory.h"
 #include "onAddTokensArgs.hpp"
 #include "midiConverter.h"
@@ -148,6 +149,85 @@ TSharedPtr<FMidiFileData> BuildMidiWithOneTimeSigature(int32 Tempo, int32 Numera
 }
 #endif
 
+void FMIDIGeneratorEnv::AddFireworkEffect()
+{
+	GenThread->AddOnInit([this]()
+	{
+		class ScalePenalty : public AutoRegressivePipelineObserver
+		{
+		public:
+			FMIDIGeneratorEnv& Env;
+			ScalePenalty(FMIDIGeneratorEnv& InEnv) : Env(InEnv) {}
+
+			virtual void OnLogitsGenerated(const LogitsView& logitsView) override
+			{
+				MidiTokenizerHandle Tok = Env.GenThread->GetTok().GetTokenizer();
+
+				logitsView.logits[0] = -10000000;
+				rangeGroupUpdateCache(Env.CurrentRangeGroup);
+
+				//if (Env.Scale != nullptr && Env.ScaleSize != 0)
+				//{
+				//	//musicalScalePenaltyTransform(args.logitsTensor, CurrentRangeGroup, Scales::Ionian::CMajor::get(), Scales::Ionian::CMajor::size(), 1.05, Tok);
+				//	musicalScalePenaltyTransform(logitsView.logits, Env.CurrentRangeGroup, Env.Scale, Env.ScaleSize, 1.05, Tok);
+				//}
+
+
+				{
+					SCOPE_CYCLE_COUNTER(STAT_GenThread_LogitProcessing2);
+					//if (hasRegen)
+					//{
+					//	int32 scale[] = {0};
+					//	musicalScalePenaltyTransform(args.logitsTensor, CurrentRangeGroup, scale, 1, 1.05, Tok);
+					//}
+					//else
+					if (Env.Scale != nullptr && Env.ScaleSize != 0)
+					{
+						//musicalScalePenaltyTransform(args.logitsTensor, CurrentRangeGroup, Scales::Ionian::CMajor::get(), Scales::Ionian::CMajor::size(), 1.05, Tok);
+						musicalScalePenaltyTransform(logitsView.logits, Env.CurrentRangeGroup, Env.Scale, Env.ScaleSize, 1.05, Tok);
+					}
+				}
+				{
+					SCOPE_CYCLE_COUNTER(STAT_GenThread_LogitProcessing3);
+					if (Env.PlayFireworkEffect && Env.nbEncodedTokensSinceRegen < 3)
+					{
+						//pitchRangePenaltyTransform(args.logitsTensor, CurrentRangeGroup, 70, 90, 0.7, Tok);
+						pitchRangePenaltyTransform(logitsView.logits, Env.CurrentRangeGroup, 70, 90, 15.0, Tok);
+					}
+					else
+					{
+						pitchRangePenaltyTransform(logitsView.logits, Env.CurrentRangeGroup, Env.minPitch, Env.maxPitch, 8.0, Tok);
+						//pitchRangePenaltyTransform(args.logitsTensor, CurrentRangeGroup, 40, 60, 0.7, Tok);
+					}
+					//pitchRangePenaltyTransform(args.logitsTensor, CurrentRangeGroup, 40, 80, 0.05, Tok);
+				}
+
+				{
+					//SCOPE_CYCLE_COUNTER(STAT_GenThread_LogitProcessing3);
+					timeShiftRangePenaltyTransform(logitsView.logits, Env.CurrentRangeGroup, Env.minTimeShift, Env.maxTimeShift, 1.05, Tok);
+
+					//if (nbEncodedTokensSinceRegen < 20)
+					//{
+					//	timeShiftRangePenaltyTransform(args.logitsTensor, CurrentRangeGroup, -1.0, -1, 1.05, Tok);
+					//}
+				}
+
+				//{
+				//	SCOPE_CYCLE_COUNTER(STAT_GenThread_LogitProcessing1);
+				//	SpecialPenaltyTransformArgs sArgs;
+				//	sArgs.pitchWindowSize = 20;
+				//	sArgs.pitchMaxAdditivePenalty = 0.05;
+				//	specialPenaltyTransform(args.logitsTensor, CurrentRangeGroup, History, &sArgs);
+				//}
+
+			}
+		};
+
+		// TODO : delete / free up memory
+		GenThread->GetPipeline()->addObserver(new ScalePenalty(*this));
+	});
+}
+
 void FMIDIGeneratorEnv::StartGeneration()
 {
 	//GenThread->Start();
@@ -204,10 +284,12 @@ void FMIDIGeneratorEnv::StartGeneration()
 				UpdateCurrentRangeGroup(LastToken);
 			});
 
-		GenThread->SetOnInit([this]()
-			{
-				SetFilter();
-			});
+		//AddFireworkEffect();
+
+		GenThread->AddOnInit([this]()
+		{
+			SetFilter();
+		});
 
 		GenThread->OnCacheRemoved.AddLambda([this](int32 libTick)
 			{
@@ -286,11 +368,6 @@ void FMIDIGeneratorEnv::SetFilter()
 	//CurrentRangeGroup = PitchTimeshiftRangeGroup;
 	CurrentRangeGroup = PitchTimeshiftRangeGroup; // we don't know what was the last token / @TODO : set according to the tokens set by the user at the start
 
-
-
-
-
-
 	GenThread->SetSearchStrategy([this](const SearchArgs& args)
 		{
 			//MidiTokenizerHandle tok = GenThread->GetTok();
@@ -303,7 +380,7 @@ void FMIDIGeneratorEnv::SetFilter()
 
 			//temperatureTransform(&args, ranges, nbRanges);
 			//repetitionPenalty(&args, ranges, nbRanges);
-			args.logitsTensor[0] = -10000000;
+			//args.logitsTensor[0] = -10000000;
 
 			//float temperature = 1.1;
 			//temperatureTransform(args.logitsTensor, ranges, nbRanges, temperature);
@@ -315,54 +392,22 @@ void FMIDIGeneratorEnv::SetFilter()
 
 			rangeGroupUpdateCache(CurrentRangeGroup);
 
-			//{
-			//	SCOPE_CYCLE_COUNTER(STAT_GenThread_LogitProcessing1);
-			//	SpecialPenaltyTransformArgs sArgs;
-			//	sArgs.pitchWindowSize = 20;
-			//	sArgs.pitchMaxAdditivePenalty = 0.05;
-			//	specialPenaltyTransform(args.logitsTensor, CurrentRangeGroup, History, &sArgs);
-			//}
-
 			MidiTokenizerHandle Tok = GenThread->GetTok().GetTokenizer();
 
-			{
-				SCOPE_CYCLE_COUNTER(STAT_GenThread_LogitProcessing2);
-				//if (hasRegen)
-				//{
-				//	int32 scale[] = {0};
-				//	musicalScalePenaltyTransform(args.logitsTensor, CurrentRangeGroup, scale, 1, 1.05, Tok);
-				//}
-				//else
-				if (Scale != nullptr && ScaleSize != 0)
-				{
-					//musicalScalePenaltyTransform(args.logitsTensor, CurrentRangeGroup, Scales::Ionian::CMajor::get(), Scales::Ionian::CMajor::size(), 1.05, Tok);
-					musicalScalePenaltyTransform(args.logitsTensor, CurrentRangeGroup, Scale, ScaleSize, 1.05, Tok);
-				}
-			}
-			{
-				SCOPE_CYCLE_COUNTER(STAT_GenThread_LogitProcessing3);
-				if (PlayFireworkEffect && nbEncodedTokensSinceRegen < 3)
-				{
-					//pitchRangePenaltyTransform(args.logitsTensor, CurrentRangeGroup, 70, 90, 0.7, Tok);
-					pitchRangePenaltyTransform(args.logitsTensor, CurrentRangeGroup, 70, 90, 15.0, Tok);
-				}
-				else
-				{
-					pitchRangePenaltyTransform(args.logitsTensor, CurrentRangeGroup, minPitch, maxPitch, 8.0, Tok);
-					//pitchRangePenaltyTransform(args.logitsTensor, CurrentRangeGroup, 40, 60, 0.7, Tok);
-				}
-				//pitchRangePenaltyTransform(args.logitsTensor, CurrentRangeGroup, 40, 80, 0.05, Tok);
-			}
 
-			{
-				//SCOPE_CYCLE_COUNTER(STAT_GenThread_LogitProcessing3);
-				timeShiftRangePenaltyTransform(args.logitsTensor, CurrentRangeGroup, minTimeShift, maxTimeShift, 1.05, Tok);
+			FMIDIGeneratorEnv& Env = *this;
+			LogitsView logitsView;
+			int b = 0; // only first batch
+			float* batchLastLogits = args.logitsTensor + (b * args.nbSequences + (args.nbSequences - 1)) * args.vocabSize;
+			logitsView.logits = batchLastLogits;
+			logitsView.vocabSize = args.vocabSize;
 
-				//if (nbEncodedTokensSinceRegen < 20)
-				//{
-				//	timeShiftRangePenaltyTransform(args.logitsTensor, CurrentRangeGroup, -1.0, -1, 1.05, Tok);
-				//}
-			}
+
+
+
+
+
+
 
 			check(args.nbBatches == 1);
 			int nbTopTokenSize = 40;
@@ -377,17 +422,17 @@ void FMIDIGeneratorEnv::SetFilter()
 			check(CurrentRangeGroupSize >= nbTopTokenSize);
 			{
 				SCOPE_CYCLE_COUNTER(STAT_GenThread_LogitProcessing5);
-				sortLogits(args.logitsTensor, LogitIndicesData, LogitIndicesData + CurrentRangeGroupSize, nbTopTokenSize);
+				sortLogits(logitsView.logits, LogitIndicesData, LogitIndicesData + CurrentRangeGroupSize, nbTopTokenSize);
 			}
 
 			{
 				SCOPE_CYCLE_COUNTER(STAT_GenThread_LogitProcessing6);
-				stableSoftmax(args.logitsTensor, LogitIndicesData, LogitIndicesData + nbTopTokenSize);
+				stableSoftmax(logitsView.logits, LogitIndicesData, LogitIndicesData + nbTopTokenSize);
 			}
 
 			{
 				SCOPE_CYCLE_COUNTER(STAT_GenThread_LogitProcessing7);
-				int outToken = topPSampling(args.logitsTensor, LogitIndicesData, LogitIndicesData + nbTopTokenSize, 0.5);
+				int outToken = topPSampling(logitsView.logits, LogitIndicesData, LogitIndicesData + nbTopTokenSize, 0.5);
 				args.outNextTokens[0] = outToken;
 			}
 		});
@@ -415,10 +460,10 @@ void FMIDIGeneratorEnv::DecodeTokens()
 			Velocity += 60 - NoteNumber;
 		}
 
-		if (NoteNumber == 70)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("=== Adding Event 70 ==="));
-		}
+		//if (NoteNumber == 70)
+		//{
+		//	UE_LOG(LogTemp, Warning, TEXT("=== Adding Event 70 ==="));
+		//}
 
 		int32 Track = 0;
 
@@ -445,7 +490,7 @@ void FMIDIGeneratorEnv::DecodeTokens()
 		//	return;
 		//}
 
-		UE_LOG(LogTemp, Warning, TEXT("=== Added Note / Current: %d / New Note: %d"), CurrentTick, Tick);
+		//UE_LOG(LogTemp, Warning, TEXT("=== Added Note / Current: %d / New Note: %d"), CurrentTick, Tick);
 
 		args.LastTick = Tick;
 
@@ -751,6 +796,10 @@ void UMIDIGeneratorEnv::SetTokens(const TArray<int32>& InTokens)
 	Generator->MidiGenerator->SetTokens(InTokens);
 }
 
+void UMIDIGeneratorEnv::AddFireworkEffect()
+{
+	Generator->MidiGenerator->AddFireworkEffect();
+}
 
 void UMIDIGeneratorEnv::SetTempo(float InTempo)
 {

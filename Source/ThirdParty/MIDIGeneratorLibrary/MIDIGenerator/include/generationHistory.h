@@ -20,7 +20,7 @@ extern "C"
     API_EXPORT TokenHistoryHandle getDecodedTokensHistory(const GenerationHistoryHandle genHistory);
     
     API_EXPORT void generationHistory_removeAfterTick(const GenerationHistoryHandle genHistory, int32_t tick);
-    API_EXPORT void generationHistory_convert(const GenerationHistoryHandle genHistory);
+    API_EXPORT void generationHistory_convertToNotes(const GenerationHistoryHandle genHistory);
     API_EXPORT void generationHistory_getNotes(const GenerationHistoryHandle genHistory, const struct Note** outNotes, size_t* outLength);
     API_EXPORT void generationHistory_getNotesMut(const GenerationHistoryHandle genHistory, struct Note** outNotes, size_t* outLength);
     API_EXPORT void generationHistory_addStandaloneNote(const GenerationHistoryHandle genHistory, struct Note* inNote);
@@ -33,6 +33,8 @@ extern "C"
     typedef void (*TOnNoteAdded)(void* userData);
     API_EXPORT void generationHistory_setOnNoteAdded(GenerationHistory* genHistory, TOnNoteAdded inOnEncodedTokenAdd);
     API_EXPORT void generationHistory_setOnNoteAddedData(GenerationHistory* genHistory, void* inOnEncodedTokenAddData);
+
+    API_EXPORT int32_t generationHistory_getCurrentTick(const GenerationHistoryHandle genHistory);
 }
 
 extern "C" 

@@ -51,6 +51,8 @@ class ModelLoader;
 class ModelLoadingParamsWrapper;
 class GenerationHistory;
 
+struct Note;
+
 using EnvHandle = Ort::Env*;
 using MidiTokenizerHandle = MidiTokenizer*;
 using MusicGeneratorHandle = MusicGenerator*;

@@ -6,6 +6,7 @@
 #include "fwd.hpp"
 
 class IPipeline;
+class AutoRegressivePipelineObserver;
 
 // A model can be loaded before the pipeline.
 // That way, depending on metadata, we can decide automatically what pipeline to use.
@@ -83,4 +84,7 @@ public:
     virtual int32_t addCallbackToSequencer(AutoRegressiveBatchHandle batchHandle, int32_t tick, class ISequencerObserver* observer) { return 0; }
     virtual void removeCallbackFromSequencer(AutoRegressiveBatchHandle batchHandle, int32_t hash) {}
     virtual void updateSequencerCallbackTick(AutoRegressiveBatchHandle batchHandle, int32_t hash, int32_t tick) {}
+
+    virtual void addObserver(AutoRegressivePipelineObserver* observer) {}
+    virtual void removeObserver(AutoRegressivePipelineObserver* observer) {}
 };

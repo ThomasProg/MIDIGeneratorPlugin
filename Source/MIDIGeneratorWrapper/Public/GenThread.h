@@ -93,7 +93,7 @@ public:
 	//void SetSearchStrategy(void* SearchStrategyData, TSearchStrategy SearchStrategy);
 	void SetSearchStrategy(TFunction<void(const struct SearchArgs& args)> InOnSearch);
 	void SetOnGenerated(TFunction<void(int32 NewToken)> InOnGenerated);
-	void SetOnInit(TFunction<void()> InOnInit);
+	void AddOnInit(TFunction<void()> InOnInit);
 
 	// BEGIN FRunnable 
 	virtual void Stop() override;
@@ -137,7 +137,6 @@ private:
 	//int32 LineNbMaxToken = 256;
 	//int32 LineNbMaxToken = 512;
 	int32 LineNbMaxToken = 1024;
-	int32 NbMaxTokensAhead = 50;
 
 	int32 NbBatchGen = 10;
 
@@ -166,8 +165,10 @@ public:
 	FEvent* Semaphore = nullptr;
 
 	std::atomic_int32_t CurrentTick;
-	int32 NbMinTicksAhead = 50;
-	int32 NbMaxTicksAhead = 400;
+	//int32 NbMinTicksAhead = 50;
+	//int32 NbMaxTicksAhead = 400;
+	int32 NbMinTicksAhead = 20;
+	int32 NbMaxTicksAhead = 80;
 
 	bool ShouldResumeGeneration() const;
 	bool ShouldSleep() const;
